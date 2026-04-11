@@ -1,0 +1,1223 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Wörterbuch">
+<meta name="theme-color" content="#1a1a2e">
+<title>Wenjins Wörterbuch</title>
+<style>
+  :root {
+    --bg: #1a1a2e;
+    --surface: #16213e;
+    --card: #0f3460;
+    --accent: #e94560;
+    --accent-light: #ff6b81;
+    --text: #eee;
+    --text-dim: #a0a0b8;
+    --green: #2ecc71;
+    --radius: 14px;
+    --safe-top: env(safe-area-inset-top, 20px);
+    --safe-bottom: env(safe-area-inset-bottom, 20px);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100dvh;
+    overflow-x: hidden;
+    padding-top: var(--safe-top);
+    padding-bottom: calc(70px + var(--safe-bottom));
+  }
+
+  /* ── Header ── */
+  .header {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: var(--bg);
+    padding: 12px 20px 8px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .header h1 {
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: -0.3px;
+  }
+  .header .count {
+    font-size: 13px;
+    color: var(--text-dim);
+    background: var(--surface);
+    padding: 4px 10px;
+    border-radius: 20px;
+  }
+
+  /* ── Search ── */
+  .search-wrap {
+    padding: 6px 20px 12px;
+    position: sticky;
+    top: 48px;
+    z-index: 99;
+    background: var(--bg);
+  }
+  .search-wrap input {
+    width: 100%;
+    padding: 10px 14px 10px 38px;
+    border: none;
+    border-radius: 10px;
+    background: var(--surface);
+    color: var(--text);
+    font-size: 15px;
+    outline: none;
+  }
+  .search-wrap input::placeholder { color: var(--text-dim); }
+  .search-wrap .icon {
+    position: absolute;
+    left: 32px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-dim);
+    font-size: 15px;
+    pointer-events: none;
+  }
+
+  /* ── Word List ── */
+  .word-list { padding: 0 20px; }
+
+  .word-card {
+    background: var(--surface);
+    border-radius: var(--radius);
+    padding: 16px;
+    margin-bottom: 12px;
+    position: relative;
+    transition: transform 0.15s;
+    border-left: 4px solid var(--accent);
+  }
+  .word-card:active { transform: scale(0.98); }
+
+  .word-card .german {
+    font-size: 20px;
+    font-weight: 700;
+    margin-bottom: 6px;
+    color: #fff;
+  }
+  .word-card .translations {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 8px;
+  }
+  .word-card .tag {
+    font-size: 13px;
+    padding: 3px 8px;
+    border-radius: 6px;
+    background: rgba(233, 69, 96, 0.15);
+    color: var(--accent-light);
+  }
+  .word-card .tag.cn {
+    background: rgba(46, 204, 113, 0.15);
+    color: var(--green);
+  }
+  .word-card .wtype-badge {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 5px;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    margin-left: 8px;
+    vertical-align: middle;
+  }
+  .wtype-Nomen    { background: rgba(52,152,219,0.2);  color: #5dade2; }
+  .wtype-Verb     { background: rgba(155,89,182,0.2);  color: #bb8fce; }
+  .wtype-Adjektiv { background: rgba(243,156,18,0.2);  color: #f5b041; }
+  .wtype-Adverb   { background: rgba(26,188,156,0.2);  color: #48c9b0; }
+  .wtype-Phrase   { background: rgba(241,148,138,0.2);  color: #f1948a; }
+  .wtype-Präposition { background: rgba(174,214,241,0.2); color: #85c1e9; }
+  .wtype-Konjunktion { background: rgba(249,231,159,0.2); color: #f9e79f; }
+  .wtype-Andere   { background: rgba(255,255,255,0.08); color: var(--text-dim); }
+  .word-card .example {
+    font-size: 14px;
+    color: var(--text-dim);
+    font-style: italic;
+    line-height: 1.45;
+    margin-top: 4px;
+  }
+  .word-card .examples-list {
+    margin-top: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .word-card .example-num {
+    font-size: 11px;
+    color: var(--accent-light);
+    opacity: 0.6;
+    font-style: normal;
+    margin-right: 4px;
+  }
+  .word-card .grammar {
+    font-size: 13px;
+    color: #7eb8da;
+    margin-top: 8px;
+    padding: 6px 10px;
+    background: rgba(126, 184, 218, 0.08);
+    border-radius: 8px;
+    line-height: 1.45;
+    white-space: pre-wrap;
+  }
+  .word-card .grammar-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    opacity: 0.6;
+    margin-bottom: 2px;
+  }
+  .word-card .date {
+    font-size: 11px;
+    color: var(--text-dim);
+    opacity: 0.6;
+    margin-top: 8px;
+  }
+  .word-card .actions {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    display: flex;
+    gap: 6px;
+  }
+  .word-card .actions button {
+    width: 30px;
+    height: 30px;
+    border: none;
+    border-radius: 8px;
+    background: rgba(255,255,255,0.08);
+    color: var(--text-dim);
+    font-size: 14px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .word-card .actions button:active { background: rgba(255,255,255,0.15); }
+
+  /* ── Empty State ── */
+  .empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--text-dim);
+  }
+  .empty-state .big-icon { font-size: 48px; margin-bottom: 16px; }
+  .empty-state p { font-size: 15px; line-height: 1.5; }
+
+  /* ── Bottom Tab Bar ── */
+  .tab-bar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: calc(60px + var(--safe-bottom));
+    padding-bottom: var(--safe-bottom);
+    background: var(--surface);
+    display: flex;
+    align-items: center;
+    justify-content: space-around;
+    border-top: 1px solid rgba(255,255,255,0.06);
+    z-index: 200;
+  }
+  .tab-bar button {
+    border: none;
+    background: none;
+    color: var(--text-dim);
+    font-size: 11px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    cursor: pointer;
+    padding: 6px 16px;
+    border-radius: 10px;
+    transition: color 0.2s;
+  }
+  .tab-bar button .tab-icon { font-size: 22px; }
+  .tab-bar button.active { color: var(--accent-light); }
+  .tab-bar button:active { background: rgba(255,255,255,0.05); }
+
+  /* ── Views ── */
+  .view { display: none; }
+  .view.active { display: block; }
+
+  /* ── Add / Edit Form ── */
+  .form-view {
+    padding: 20px;
+  }
+  .form-view h2 {
+    font-size: 20px;
+    font-weight: 700;
+    margin-bottom: 20px;
+  }
+  .field {
+    margin-bottom: 16px;
+  }
+  .field label {
+    display: block;
+    font-size: 13px;
+    color: var(--text-dim);
+    margin-bottom: 6px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .field input,
+  .field textarea {
+    width: 100%;
+    padding: 12px 14px;
+    border: 2px solid transparent;
+    border-radius: 10px;
+    background: var(--surface);
+    color: var(--text);
+    font-size: 16px;
+    font-family: inherit;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .field input:focus,
+  .field textarea:focus {
+    border-color: var(--accent);
+  }
+  .field textarea {
+    resize: vertical;
+    min-height: 70px;
+    line-height: 1.4;
+  }
+  .field input::placeholder,
+  .field textarea::placeholder { color: var(--text-dim); opacity: 0.5; }
+
+  /* ── Lookup button ── */
+  .input-with-btn {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  .input-with-btn input { flex: 1; }
+  .lookup-btn {
+    flex-shrink: 0;
+    height: 46px;
+    padding: 0 14px;
+    border: none;
+    border-radius: 10px;
+    background: var(--accent);
+    color: #fff;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: opacity 0.2s, transform 0.1s;
+  }
+  .lookup-btn:active { transform: scale(0.95); }
+  .lookup-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  .lookup-btn.loading {
+    position: relative;
+    color: transparent;
+  }
+  .lookup-btn.loading::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    margin: auto;
+    width: 18px;
+    height: 18px;
+    border: 2.5px solid rgba(255,255,255,0.3);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .autofill-flash {
+    animation: flashGreen 0.6s ease;
+  }
+  @keyframes flashGreen {
+    0% { border-color: var(--green); box-shadow: 0 0 0 0 rgba(46,204,113,0.4); }
+    50% { border-color: var(--green); box-shadow: 0 0 8px 2px rgba(46,204,113,0.2); }
+    100% { border-color: transparent; box-shadow: none; }
+  }
+
+  /* ── Word type pill selector ── */
+  .wtype-selector {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .wtype-pill {
+    padding: 7px 14px;
+    border-radius: 20px;
+    border: 1.5px solid rgba(255,255,255,0.12);
+    background: transparent;
+    color: var(--text-dim);
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .wtype-pill:active { transform: scale(0.95); }
+  .wtype-pill.selected {
+    border-color: transparent;
+    color: #fff;
+    font-weight: 600;
+  }
+  .wtype-pill.selected[data-type="Nomen"]       { background: rgba(52,152,219,0.35); }
+  .wtype-pill.selected[data-type="Verb"]        { background: rgba(155,89,182,0.35); }
+  .wtype-pill.selected[data-type="Adjektiv"]    { background: rgba(243,156,18,0.35); }
+  .wtype-pill.selected[data-type="Adverb"]      { background: rgba(26,188,156,0.35); }
+  .wtype-pill.selected[data-type="Phrase"]       { background: rgba(241,148,138,0.35); }
+  .wtype-pill.selected[data-type="Präposition"] { background: rgba(174,214,241,0.35); }
+  .wtype-pill.selected[data-type="Konjunktion"] { background: rgba(249,231,159,0.35); }
+  .wtype-pill.selected[data-type="Andere"]      { background: rgba(255,255,255,0.12); }
+
+  /* ── Word type filter row ── */
+  .filter-section-label {
+    padding: 0 20px;
+    font-size: 11px;
+    color: var(--text-dim);
+    opacity: 0.6;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 4px;
+  }
+
+  /* ── Dynamic example rows ── */
+  .example-row {
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+    margin-bottom: 8px;
+  }
+  .example-row textarea {
+    flex: 1;
+    padding: 10px 12px;
+    border: 2px solid transparent;
+    border-radius: 10px;
+    background: var(--surface);
+    color: var(--text);
+    font-size: 15px;
+    font-family: inherit;
+    outline: none;
+    transition: border-color 0.2s;
+    resize: vertical;
+    min-height: 44px;
+    line-height: 1.4;
+  }
+  .example-row textarea:focus { border-color: var(--accent); }
+  .example-row textarea::placeholder { color: var(--text-dim); opacity: 0.5; }
+  .example-row .remove-btn {
+    width: 32px;
+    height: 32px;
+    flex-shrink: 0;
+    margin-top: 6px;
+    border: none;
+    border-radius: 8px;
+    background: rgba(233, 69, 96, 0.15);
+    color: var(--accent-light);
+    font-size: 16px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .example-row .remove-btn:active { opacity: 0.7; }
+  .add-example-btn {
+    border: 1.5px dashed rgba(255,255,255,0.15);
+    background: transparent;
+    color: var(--text-dim);
+    padding: 8px 14px;
+    border-radius: 10px;
+    font-size: 14px;
+    cursor: pointer;
+    width: 100%;
+    text-align: center;
+  }
+  .add-example-btn:active { background: rgba(255,255,255,0.03); }
+
+  .btn {
+    width: 100%;
+    padding: 14px;
+    border: none;
+    border-radius: 12px;
+    font-size: 16px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: transform 0.1s, opacity 0.2s;
+  }
+  .btn:active { transform: scale(0.97); }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-secondary { background: var(--surface); color: var(--text); margin-top: 10px; }
+  .btn-danger { background: rgba(233, 69, 96, 0.15); color: var(--accent-light); margin-top: 10px; }
+
+  /* ── Stats View ── */
+  .stats-view { padding: 20px; }
+  .stats-view h2 { font-size: 20px; font-weight: 700; margin-bottom: 20px; }
+  .stat-card {
+    background: var(--surface);
+    border-radius: var(--radius);
+    padding: 20px;
+    margin-bottom: 12px;
+    text-align: center;
+  }
+  .stat-card .stat-num {
+    font-size: 36px;
+    font-weight: 800;
+    color: var(--accent-light);
+  }
+  .stat-card .stat-label {
+    font-size: 13px;
+    color: var(--text-dim);
+    margin-top: 4px;
+  }
+  .stats-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+
+  /* ── Export/Import ── */
+  .data-section {
+    margin-top: 24px;
+    padding-top: 20px;
+    border-top: 1px solid rgba(255,255,255,0.06);
+  }
+  .data-section h3 {
+    font-size: 15px;
+    font-weight: 600;
+    margin-bottom: 12px;
+    color: var(--text-dim);
+  }
+  .btn-small {
+    padding: 10px 16px;
+    border: none;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    background: var(--surface);
+    color: var(--text);
+    margin-right: 8px;
+    margin-bottom: 8px;
+  }
+  .btn-small:active { opacity: 0.7; }
+
+  /* ── Toast ── */
+  .toast {
+    position: fixed;
+    top: calc(var(--safe-top) + 10px);
+    left: 50%;
+    transform: translateX(-50%) translateY(-100px);
+    background: var(--green);
+    color: #fff;
+    padding: 10px 20px;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 600;
+    z-index: 999;
+    transition: transform 0.3s ease;
+    white-space: nowrap;
+  }
+  .toast.show { transform: translateX(-50%) translateY(0); }
+
+  /* ── Confirm Dialog ── */
+  .overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.6);
+    z-index: 500;
+    align-items: center;
+    justify-content: center;
+    padding: 30px;
+  }
+  .overlay.show { display: flex; }
+  .dialog {
+    background: var(--surface);
+    border-radius: var(--radius);
+    padding: 24px;
+    max-width: 320px;
+    width: 100%;
+    text-align: center;
+  }
+  .dialog p { font-size: 15px; margin-bottom: 20px; line-height: 1.5; }
+  .dialog-btns { display: flex; gap: 10px; }
+  .dialog-btns button {
+    flex: 1;
+    padding: 12px;
+    border: none;
+    border-radius: 10px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .dialog-btns .cancel { background: rgba(255,255,255,0.08); color: var(--text); }
+  .dialog-btns .confirm { background: var(--accent); color: #fff; }
+
+  /* ── Category filter chips ── */
+  .filter-bar {
+    padding: 0 20px 10px;
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .filter-bar::-webkit-scrollbar { display: none; }
+  .chip {
+    flex-shrink: 0;
+    padding: 6px 12px;
+    border-radius: 20px;
+    border: 1.5px solid rgba(255,255,255,0.1);
+    background: transparent;
+    color: var(--text-dim);
+    font-size: 13px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .chip.active {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+  }
+
+  /* Smooth page transitions */
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .view.active { animation: fadeIn 0.2s ease; }
+</style>
+</head>
+<body>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<!-- Confirm Dialog -->
+<div class="overlay" id="confirmOverlay">
+  <div class="dialog">
+    <p id="confirmMsg">Are you sure?</p>
+    <div class="dialog-btns">
+      <button class="cancel" onclick="closeConfirm()">Cancel</button>
+      <button class="confirm" id="confirmBtn">Delete</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ LIST VIEW ═══ -->
+<div class="view active" id="listView">
+  <div class="header">
+    <h1>Wenjins Wörterbuch</h1>
+    <span class="count" id="wordCount">0 words</span>
+  </div>
+  <div class="search-wrap">
+    <span class="icon">&#128269;</span>
+    <input type="text" id="searchInput" placeholder="Search words..." autocomplete="off">
+  </div>
+  <div class="filter-bar" id="wordTypeFilterBar"></div>
+  <div class="filter-bar" id="filterBar"></div>
+  <div class="word-list" id="wordList"></div>
+</div>
+
+<!-- ═══ ADD VIEW ═══ -->
+<div class="view" id="addView">
+  <div class="header">
+    <h1 id="formTitle">New Word</h1>
+  </div>
+  <div class="form-view">
+    <div class="field">
+      <label>German</label>
+      <div class="input-with-btn">
+        <input type="text" id="fGerman" placeholder="e.g. die Bedeutung" autocapitalize="none">
+        <button type="button" class="lookup-btn" id="lookupBtn" onclick="lookupWord()">Lookup</button>
+      </div>
+    </div>
+    <div class="field">
+      <label>English</label>
+      <input type="text" id="fEnglish" placeholder="e.g. the meaning — auto-filled by Lookup">
+    </div>
+    <div class="field">
+      <label>中文</label>
+      <input type="text" id="fChinese" placeholder="e.g. 意义 — auto-filled by Lookup">
+    </div>
+    <div class="field">
+      <label>Word Type</label>
+      <div class="wtype-selector" id="wtypeSelector">
+        <button type="button" class="wtype-pill" data-type="Nomen" onclick="selectWordType(this)">Nomen</button>
+        <button type="button" class="wtype-pill" data-type="Verb" onclick="selectWordType(this)">Verb</button>
+        <button type="button" class="wtype-pill" data-type="Adjektiv" onclick="selectWordType(this)">Adjektiv</button>
+        <button type="button" class="wtype-pill" data-type="Adverb" onclick="selectWordType(this)">Adverb</button>
+        <button type="button" class="wtype-pill" data-type="Phrase" onclick="selectWordType(this)">Phrase</button>
+        <button type="button" class="wtype-pill" data-type="Präposition" onclick="selectWordType(this)">Präposition</button>
+        <button type="button" class="wtype-pill" data-type="Konjunktion" onclick="selectWordType(this)">Konjunktion</button>
+        <button type="button" class="wtype-pill" data-type="Andere" onclick="selectWordType(this)">Andere</button>
+      </div>
+    </div>
+    <div class="field">
+      <label>Example Sentences</label>
+      <div id="examplesContainer"></div>
+      <button type="button" class="add-example-btn" onclick="addExampleRow()">+ Add example sentence</button>
+    </div>
+    <div class="field">
+      <label>Grammar Notes (optional)</label>
+      <textarea id="fGrammar" placeholder="e.g. Perfekt mit 'haben': hat bedeutet&#10;Plural: die Bedeutungen&#10;Akkusativ: die Bedeutung"></textarea>
+    </div>
+    <div class="field">
+      <label>Category (optional)</label>
+      <input type="text" id="fCategory" placeholder="e.g. Alltag, Arbeit, Reise...">
+    </div>
+    <button class="btn btn-primary" id="saveBtn" onclick="saveWord()">Save Word</button>
+    <button class="btn btn-secondary" onclick="cancelForm()">Cancel</button>
+    <button class="btn btn-danger" id="deleteBtn" style="display:none" onclick="promptDelete()">Delete This Word</button>
+  </div>
+</div>
+
+<!-- ═══ STATS VIEW ═══ -->
+<div class="view" id="statsView">
+  <div class="header">
+    <h1>Statistics</h1>
+  </div>
+  <div class="stats-view">
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-num" id="statTotal">0</div>
+        <div class="stat-label">Total Words</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-num" id="statWeek">0</div>
+        <div class="stat-label">This Week</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-num" id="statToday">0</div>
+        <div class="stat-label">Today</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-num" id="statCategories">0</div>
+        <div class="stat-label">Categories</div>
+      </div>
+    </div>
+
+    <div class="data-section">
+      <h3>Your Data</h3>
+      <button class="btn-small" onclick="exportData()">Export JSON</button>
+      <button class="btn-small" onclick="exportCSV()">Export CSV</button>
+      <button class="btn-small" onclick="document.getElementById('importFile').click()">Import JSON</button>
+      <input type="file" id="importFile" accept=".json" style="display:none" onchange="importData(event)">
+    </div>
+  </div>
+</div>
+
+<!-- ═══ Tab Bar ═══ -->
+<div class="tab-bar">
+  <button class="active" onclick="switchTab('list')" id="tabList">
+    <span class="tab-icon">&#128218;</span>
+    Words
+  </button>
+  <button onclick="switchTab('add')" id="tabAdd">
+    <span class="tab-icon">&#10133;</span>
+    Add
+  </button>
+  <button onclick="switchTab('stats')" id="tabStats">
+    <span class="tab-icon">&#128202;</span>
+    Stats
+  </button>
+</div>
+
+<script>
+// ── Data Layer ──
+let words = [];
+let editingId = null;
+let activeCategory = null;
+let activeWordType = null;
+
+const WORD_TYPES = ['Nomen', 'Verb', 'Adjektiv', 'Adverb', 'Phrase', 'Präposition', 'Konjunktion', 'Andere'];
+
+function loadWords() {
+  try {
+    words = JSON.parse(localStorage.getItem('wenjin_words') || '[]');
+  } catch { words = []; }
+}
+
+function saveWords() {
+  localStorage.setItem('wenjin_words', JSON.stringify(words));
+}
+
+// ── Init ──
+loadWords();
+renderList();
+updateStats();
+
+// ── Tab Switching ──
+function switchTab(tab) {
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.querySelectorAll('.tab-bar button').forEach(b => b.classList.remove('active'));
+
+  if (tab === 'list') {
+    document.getElementById('listView').classList.add('active');
+    document.getElementById('tabList').classList.add('active');
+    renderList();
+  } else if (tab === 'add') {
+    document.getElementById('addView').classList.add('active');
+    document.getElementById('tabAdd').classList.add('active');
+    if (!editingId) resetForm();
+  } else if (tab === 'stats') {
+    document.getElementById('statsView').classList.add('active');
+    document.getElementById('tabStats').classList.add('active');
+    updateStats();
+  }
+}
+
+// ── Render Word List ──
+function renderList() {
+  const query = document.getElementById('searchInput').value.toLowerCase().trim();
+  let filtered = words;
+
+  if (query) {
+    filtered = filtered.filter(w =>
+      w.german.toLowerCase().includes(query) ||
+      w.english.toLowerCase().includes(query) ||
+      w.chinese.includes(query) ||
+      (w.wordType || '').toLowerCase().includes(query) ||
+      (w.examples || []).some(ex => ex.toLowerCase().includes(query)) ||
+      (w.example || '').toLowerCase().includes(query) ||
+      (w.grammar || '').toLowerCase().includes(query) ||
+      (w.category || '').toLowerCase().includes(query)
+    );
+  }
+
+  if (activeWordType) {
+    filtered = filtered.filter(w => (w.wordType || '') === activeWordType);
+  }
+
+  if (activeCategory) {
+    filtered = filtered.filter(w => (w.category || '').toLowerCase() === activeCategory.toLowerCase());
+  }
+
+  // Sort newest first
+  filtered.sort((a, b) => b.createdAt - a.createdAt);
+
+  const container = document.getElementById('wordList');
+  document.getElementById('wordCount').textContent = words.length + (words.length === 1 ? ' word' : ' words');
+
+  if (filtered.length === 0) {
+    container.innerHTML = `
+      <div class="empty-state">
+        <div class="big-icon">&#128214;</div>
+        <p>${words.length === 0 ? 'Your vocabulary book is empty.<br>Tap <strong>+&nbsp;Add</strong> to save your first word!' : 'No matching words found.'}</p>
+      </div>`;
+    return;
+  }
+
+  container.innerHTML = filtered.map(w => `
+    <div class="word-card" onclick="editWord('${w.id}')">
+      <div class="actions" onclick="event.stopPropagation()">
+        <button onclick="editWord('${w.id}')" title="Edit">&#9998;</button>
+      </div>
+      <div class="german">${esc(w.german)}${w.wordType ? `<span class="wtype-badge wtype-${w.wordType}">${esc(w.wordType)}</span>` : ''}</div>
+      <div class="translations">
+        <span class="tag">EN: ${esc(w.english)}</span>
+        ${w.chinese ? `<span class="tag cn">中: ${esc(w.chinese)}</span>` : ''}
+      </div>
+      ${renderExamples(w)}
+      ${w.grammar ? `<div class="grammar"><div class="grammar-label">Grammar</div>${esc(w.grammar)}</div>` : ''}
+      <div class="date">${w.category ? esc(w.category) + ' · ' : ''}${formatDate(w.createdAt)}</div>
+    </div>
+  `).join('');
+
+  renderWordTypeFilterBar();
+  renderFilterBar();
+}
+
+function renderWordTypeFilterBar() {
+  const typesInUse = [...new Set(words.map(w => w.wordType).filter(Boolean))];
+  const bar = document.getElementById('wordTypeFilterBar');
+  if (typesInUse.length === 0) { bar.innerHTML = ''; return; }
+
+  // Show only types that have at least one word
+  const orderedTypes = WORD_TYPES.filter(t => typesInUse.includes(t));
+  bar.innerHTML = `<button class="chip ${!activeWordType ? 'active' : ''}" onclick="filterWordType(null)">All</button>` +
+    orderedTypes.map(t => `<button class="chip ${activeWordType === t ? 'active' : ''}" onclick="filterWordType('${t}')">${t}</button>`).join('');
+}
+
+function filterWordType(type) {
+  activeWordType = type;
+  renderList();
+}
+
+function renderFilterBar() {
+  const cats = [...new Set(words.map(w => w.category).filter(Boolean))].sort();
+  const bar = document.getElementById('filterBar');
+  if (cats.length === 0) { bar.innerHTML = ''; return; }
+
+  bar.innerHTML = `<button class="chip ${!activeCategory ? 'active' : ''}" onclick="filterCategory(null)">All</button>` +
+    cats.map(c => `<button class="chip ${activeCategory === c ? 'active' : ''}" onclick="filterCategory('${esc(c)}')">${esc(c)}</button>`).join('');
+}
+
+function filterCategory(cat) {
+  activeCategory = cat;
+  renderList();
+}
+
+// ── Dictionary Lookup ──
+async function lookupWord() {
+  const german = document.getElementById('fGerman').value.trim();
+  if (!german) {
+    showToast('Type a German word first');
+    return;
+  }
+
+  const btn = document.getElementById('lookupBtn');
+  btn.classList.add('loading');
+  btn.disabled = true;
+
+  try {
+    // Fetch English and Chinese translations in parallel
+    const [enRes, zhRes] = await Promise.all([
+      fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(german)}&langpair=de|en`)
+        .then(r => r.json()).catch(() => null),
+      fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(german)}&langpair=de|zh-CN`)
+        .then(r => r.json()).catch(() => null)
+    ]);
+
+    let enFilled = false, zhFilled = false;
+
+    // Fill English
+    if (enRes && enRes.responseStatus === 200 && enRes.responseData) {
+      const mainTranslation = enRes.responseData.translatedText;
+      // Also collect alternative translations from matches
+      const alternatives = (enRes.matches || [])
+        .filter(m => m.segment.toLowerCase() === german.toLowerCase() && m.translation !== mainTranslation)
+        .map(m => m.translation)
+        .filter((v, i, a) => a.indexOf(v) === i) // unique
+        .slice(0, 3);
+
+      let enText = mainTranslation;
+      if (alternatives.length > 0) {
+        enText += '; ' + alternatives.join('; ');
+      }
+
+      const enInput = document.getElementById('fEnglish');
+      if (!enInput.value.trim()) {
+        enInput.value = enText;
+        flashField(enInput);
+        enFilled = true;
+      } else {
+        // If field already has content, only fill if user wants
+        enInput.value = enText;
+        flashField(enInput);
+        enFilled = true;
+      }
+    }
+
+    // Fill Chinese
+    if (zhRes && zhRes.responseStatus === 200 && zhRes.responseData) {
+      const zhInput = document.getElementById('fChinese');
+      zhInput.value = zhRes.responseData.translatedText;
+      flashField(zhInput);
+      zhFilled = true;
+    }
+
+    if (enFilled || zhFilled) {
+      showToast('Translations found!');
+    } else {
+      showToast('No translations found — try a different word');
+    }
+  } catch (err) {
+    showToast('Lookup failed — check your internet connection');
+  } finally {
+    btn.classList.remove('loading');
+    btn.disabled = false;
+  }
+}
+
+function flashField(input) {
+  input.classList.remove('autofill-flash');
+  void input.offsetWidth; // trigger reflow
+  input.classList.add('autofill-flash');
+}
+
+// ── Dynamic Example Rows ──
+function addExampleRow(value) {
+  const container = document.getElementById('examplesContainer');
+  const row = document.createElement('div');
+  row.className = 'example-row';
+  row.innerHTML = `
+    <textarea placeholder="e.g. Das hat eine besondere Bedeutung." rows="1">${value ? esc(value) : ''}</textarea>
+    <button type="button" class="remove-btn" onclick="removeExampleRow(this)" title="Remove">&#10005;</button>
+  `;
+  container.appendChild(row);
+  // Auto-grow
+  const ta = row.querySelector('textarea');
+  ta.addEventListener('input', autoGrow);
+  autoGrow.call(ta);
+}
+
+function removeExampleRow(btn) {
+  const container = document.getElementById('examplesContainer');
+  btn.closest('.example-row').remove();
+  // Always keep at least one row
+  if (container.children.length === 0) addExampleRow();
+}
+
+function getExamples() {
+  return [...document.querySelectorAll('#examplesContainer textarea')]
+    .map(ta => ta.value.trim())
+    .filter(Boolean);
+}
+
+function autoGrow() {
+  this.style.height = 'auto';
+  this.style.height = this.scrollHeight + 'px';
+}
+
+// ── Word Type Selector ──
+function selectWordType(btn) {
+  const wasSelected = btn.classList.contains('selected');
+  document.querySelectorAll('#wtypeSelector .wtype-pill').forEach(p => p.classList.remove('selected'));
+  if (!wasSelected) btn.classList.add('selected');
+}
+
+function getSelectedWordType() {
+  const sel = document.querySelector('#wtypeSelector .wtype-pill.selected');
+  return sel ? sel.dataset.type : '';
+}
+
+function setSelectedWordType(type) {
+  document.querySelectorAll('#wtypeSelector .wtype-pill').forEach(p => {
+    p.classList.toggle('selected', p.dataset.type === type);
+  });
+}
+
+// ── Form ──
+function resetForm() {
+  editingId = null;
+  document.getElementById('formTitle').textContent = 'New Word';
+  document.getElementById('fGerman').value = '';
+  document.getElementById('fEnglish').value = '';
+  document.getElementById('fChinese').value = '';
+  document.getElementById('fGrammar').value = '';
+  document.getElementById('fCategory').value = '';
+  document.getElementById('deleteBtn').style.display = 'none';
+  document.getElementById('saveBtn').textContent = 'Save Word';
+  // Reset word type
+  document.querySelectorAll('#wtypeSelector .wtype-pill').forEach(p => p.classList.remove('selected'));
+  // Reset examples to one empty row
+  document.getElementById('examplesContainer').innerHTML = '';
+  addExampleRow();
+}
+
+function editWord(id) {
+  const w = words.find(x => x.id === id);
+  if (!w) return;
+  editingId = id;
+  document.getElementById('formTitle').textContent = 'Edit Word';
+  document.getElementById('fGerman').value = w.german;
+  document.getElementById('fEnglish').value = w.english;
+  document.getElementById('fChinese').value = w.chinese || '';
+  document.getElementById('fGrammar').value = w.grammar || '';
+  document.getElementById('fCategory').value = w.category || '';
+  setSelectedWordType(w.wordType || '');
+  document.getElementById('deleteBtn').style.display = 'block';
+  document.getElementById('saveBtn').textContent = 'Update Word';
+  // Populate examples
+  document.getElementById('examplesContainer').innerHTML = '';
+  const examples = w.examples || (w.example ? [w.example] : []);
+  if (examples.length === 0) {
+    addExampleRow();
+  } else {
+    examples.forEach(ex => addExampleRow(ex));
+  }
+  switchTab('add');
+}
+
+function saveWord() {
+  const german = document.getElementById('fGerman').value.trim();
+  const english = document.getElementById('fEnglish').value.trim();
+  const chinese = document.getElementById('fChinese').value.trim();
+  const wordType = getSelectedWordType();
+  const grammar = document.getElementById('fGrammar').value.trim();
+  const examples = getExamples();
+  const category = document.getElementById('fCategory').value.trim();
+
+  if (!german || !english) {
+    showToast('Please fill in German and English fields');
+    return;
+  }
+
+  if (editingId) {
+    const w = words.find(x => x.id === editingId);
+    if (w) {
+      w.german = german;
+      w.english = english;
+      w.chinese = chinese;
+      w.wordType = wordType;
+      w.grammar = grammar;
+      w.examples = examples;
+      w.example = examples[0] || '';  // backward compat
+      w.category = category;
+      w.updatedAt = Date.now();
+    }
+    showToast('Word updated!');
+  } else {
+    words.push({
+      id: 'w' + Date.now() + Math.random().toString(36).slice(2, 6),
+      german, english, chinese, wordType, grammar, examples,
+      example: examples[0] || '',  // backward compat
+      category,
+      createdAt: Date.now(),
+      updatedAt: Date.now()
+    });
+    showToast('Word saved!');
+  }
+
+  saveWords();
+  resetForm();
+  switchTab('list');
+}
+
+function cancelForm() {
+  resetForm();
+  switchTab('list');
+}
+
+function promptDelete() {
+  document.getElementById('confirmMsg').textContent = 'Delete this word? This cannot be undone.';
+  document.getElementById('confirmBtn').onclick = function() {
+    words = words.filter(w => w.id !== editingId);
+    saveWords();
+    closeConfirm();
+    resetForm();
+    switchTab('list');
+    showToast('Word deleted');
+  };
+  document.getElementById('confirmOverlay').classList.add('show');
+}
+
+function closeConfirm() {
+  document.getElementById('confirmOverlay').classList.remove('show');
+}
+
+// ── Stats ──
+function updateStats() {
+  const now = Date.now();
+  const dayMs = 86400000;
+  const todayStart = new Date().setHours(0,0,0,0);
+  const weekStart = todayStart - (new Date().getDay() * dayMs);
+
+  document.getElementById('statTotal').textContent = words.length;
+  document.getElementById('statToday').textContent = words.filter(w => w.createdAt >= todayStart).length;
+  document.getElementById('statWeek').textContent = words.filter(w => w.createdAt >= weekStart).length;
+  document.getElementById('statCategories').textContent = new Set(words.map(w => w.category).filter(Boolean)).size;
+}
+
+// ── Export / Import ──
+function exportData() {
+  const blob = new Blob([JSON.stringify(words, null, 2)], { type: 'application/json' });
+  downloadBlob(blob, 'wenjins-woerterbuch-' + new Date().toISOString().slice(0,10) + '.json');
+  showToast('Exported ' + words.length + ' words');
+}
+
+function exportCSV() {
+  let csv = 'German,English,Chinese,Word Type,Examples,Grammar,Category,Date\n';
+  words.forEach(w => {
+    const exs = (w.examples || (w.example ? [w.example] : [])).join(' | ');
+    csv += [w.german, w.english, w.chinese || '', w.wordType || '', exs, w.grammar || '', w.category || '', new Date(w.createdAt).toLocaleDateString()]
+      .map(f => '"' + f.replace(/"/g, '""') + '"').join(',') + '\n';
+  });
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' });
+  downloadBlob(blob, 'wenjins-woerterbuch-' + new Date().toISOString().slice(0,10) + '.csv');
+  showToast('Exported CSV');
+}
+
+function downloadBlob(blob, filename) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function importData(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const imported = JSON.parse(e.target.result);
+      if (!Array.isArray(imported)) throw new Error('Invalid format');
+      const before = words.length;
+      // Merge: skip duplicates by id
+      const existingIds = new Set(words.map(w => w.id));
+      imported.forEach(w => {
+        if (!existingIds.has(w.id)) {
+          words.push(w);
+        }
+      });
+      saveWords();
+      renderList();
+      updateStats();
+      showToast('Imported ' + (words.length - before) + ' new words');
+    } catch {
+      showToast('Invalid file format');
+    }
+  };
+  reader.readAsText(file);
+  event.target.value = '';
+}
+
+// ── Search ──
+document.getElementById('searchInput').addEventListener('input', renderList);
+
+// ── Render Examples Helper ──
+function renderExamples(w) {
+  const exs = w.examples || (w.example ? [w.example] : []);
+  if (exs.length === 0) return '';
+  if (exs.length === 1) {
+    return `<div class="example">${esc(exs[0])}</div>`;
+  }
+  return `<div class="examples-list">${exs.map((ex, i) =>
+    `<div class="example"><span class="example-num">${i + 1}.</span>${esc(ex)}</div>`
+  ).join('')}</div>`;
+}
+
+// ── Helpers ──
+function esc(str) {
+  const d = document.createElement('div');
+  d.textContent = str;
+  return d.innerHTML;
+}
+
+function formatDate(ts) {
+  const d = new Date(ts);
+  const now = new Date();
+  const diff = now - d;
+  if (diff < 60000) return 'just now';
+  if (diff < 3600000) return Math.floor(diff / 60000) + 'm ago';
+  if (diff < 86400000) return Math.floor(diff / 3600000) + 'h ago';
+  if (diff < 604800000) return Math.floor(diff / 86400000) + 'd ago';
+  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2000);
+}
+</script>
+</body>
+</html>
