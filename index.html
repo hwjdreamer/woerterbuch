@@ -1257,14 +1257,19 @@ function setSyncing() {
 function signInWithGoogle() {
   if (!auth) return;
   const provider = new firebase.auth.GoogleAuthProvider();
-  auth.signInWithPopup(provider).catch(e => {
-    // Popup blocked on mobile? Try redirect
-    if (e.code === 'auth/popup-blocked' || e.code === 'auth/cancelled-popup-request') {
-      auth.signInWithRedirect(provider);
-    } else {
-      showToast('Sign-in failed: ' + e.message);
-    }
-  });
+  // Use redirect on mobile (popups are blocked in mobile Safari)
+  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+  if (isMobile) {
+    auth.signInWithRedirect(provider);
+  } else {
+    auth.signInWithPopup(provider).catch(e => {
+      if (e.code === 'auth/popup-blocked' || e.code === 'auth/cancelled-popup-request') {
+        auth.signInWithRedirect(provider);
+      } else {
+        showToast('Sign-in failed: ' + e.message);
+      }
+    });
+  }
 }
 function signOut() {
   if (!auth) return;
