@@ -941,8 +941,8 @@
     <input type="text" id="searchInput" placeholder="Search words..." autocomplete="off">
   </div>
   <div id="signInBanner" style="margin:0 20px 12px;padding:16px;background:var(--surface);border-radius:14px;text-align:center;display:none;">
-    <p style="font-size:14px;color:var(--text-dim);margin-bottom:12px;">Sign in to sync words across your devices</p>
-    <button onclick="signInWithGoogle()" style="width:100%;padding:14px;border:none;border-radius:12px;background:var(--accent);color:#fff;font-size:16px;font-weight:600;cursor:pointer;min-height:50px;">Sign In with Google</button>
+    <p style="font-size:14px;color:var(--text-dim);margin-bottom:12px;">Sync words across iPhone, iPad &amp; more</p>
+    <button onclick="showSetup()" style="width:100%;padding:14px;border:none;border-radius:12px;background:var(--accent);color:#fff;font-size:16px;font-weight:600;cursor:pointer;min-height:50px;">Set Up Sync</button>
   </div>
   <div class="filter-bar" id="wordTypeFilterBar"></div>
   <div class="filter-bar" id="filterBar"></div>
@@ -1048,7 +1048,7 @@
         <p style="font-size:13px;color:var(--text-dim);">Not connected</p>
       </div>
       <button class="btn-small" onclick="showSetup()" id="syncSetupBtn" style="min-height:44px;padding:12px 20px;background:var(--accent);color:#fff;">Set Up Sync</button>
-      <button class="btn-small" onclick="signOut()" id="syncSignOutBtn" style="display:none;min-height:44px;padding:12px 20px;">Sign Out</button>
+      <button class="btn-small" onclick="disconnectSync()" id="syncSignOutBtn" style="display:none;min-height:44px;padding:12px 20px;">Disconnect</button>
     </div>
 
     <div class="data-section">
@@ -1106,7 +1106,6 @@
 
 <!-- Firebase SDK (loaded async, non-blocking) -->
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js" defer></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js" defer></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js" defer></script>
 
 <script>
@@ -1169,14 +1168,14 @@ function toggleShowDismissed() {
 }
 
 // ═══════════════════════════════════
-// ── Firebase Cloud Sync ──
+// ── Firebase Cloud Sync (Sync Code) ──
 // ═══════════════════════════════════
 let db = null;
-let auth = null;
-let currentUser = null;
+let syncCode = null;
 let unsubWords = null;
 let unsubDismissed = null;
 let syncEnabled = false;
+let syncConnected = false;
 
 const FIREBASE_CONFIG = {
   apiKey: "AIzaSyDaNOhWh7Ua8kToy_cualh70pF7LOpBKW8",
@@ -1184,30 +1183,40 @@ const FIREBASE_CONFIG = {
   projectId: "woerterbuch-wj"
 };
 
-function getFirebaseConfig() { return FIREBASE_CONFIG; }
-function setFirebaseConfig(cfg) {}
+function getSyncCode() {
+  return localStorage.getItem('wenjin_sync_code') || null;
+}
+function setSyncCode(code) {
+  localStorage.setItem('wenjin_sync_code', code);
+}
+function clearSyncCode() {
+  localStorage.removeItem('wenjin_sync_code');
+}
+
+function generateCode() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let code = '';
+  for (let i = 0; i < 6; i++) code += chars[Math.floor(Math.random() * chars.length)];
+  return code;
+}
 
 function initFirebase() {
   if (typeof firebase === 'undefined') return;
-  const cfg = FIREBASE_CONFIG;
   try {
     if (!firebase.apps.length) {
-      firebase.initializeApp(cfg);
+      firebase.initializeApp(FIREBASE_CONFIG);
     }
-    auth = firebase.auth();
     db = firebase.firestore();
     db.enablePersistence({ synchronizeTabs: true }).catch(() => {});
     syncEnabled = true;
 
-    auth.onAuthStateChanged(user => {
-      currentUser = user;
-      updateSyncUI();
-      if (user) {
-        startRealtimeSync();
-      } else {
-        stopRealtimeSync();
-      }
-    });
+    // Check for existing sync code
+    syncCode = getSyncCode();
+    if (syncCode) {
+      startRealtimeSync();
+      syncConnected = true;
+    }
+    updateSyncUI();
   } catch (e) {
     console.error('Firebase init failed:', e);
     syncEnabled = false;
@@ -1220,37 +1229,30 @@ function updateSyncUI() {
   const status = document.getElementById('syncStatus');
   const setupBtn = document.getElementById('syncSetupBtn');
   const signOutBtn = document.getElementById('syncSignOutBtn');
-
   const banner = document.getElementById('signInBanner');
 
-  if (currentUser) {
+  if (syncConnected && syncCode) {
     badge.className = 'sync-indicator synced';
     label.textContent = 'Synced';
-    status.innerHTML = '<div class="sync-user">' +
-      (currentUser.photoURL ? '<img src="' + currentUser.photoURL + '" alt="">' : '') +
-      '<span class="sync-email">' + (currentUser.email || 'Signed in') + '</span></div>' +
-      '<p style="font-size:12px;color:var(--green);">\u2713 Real-time sync active</p>';
+    status.innerHTML = '<p style="font-size:14px;color:var(--text);">Sync code: <b style="letter-spacing:2px;color:var(--accent);">' + syncCode + '</b></p>' +
+      '<p style="font-size:12px;color:var(--green);margin-top:4px;">\u2713 Real-time sync active</p>';
     setupBtn.style.display = 'none';
     signOutBtn.style.display = '';
     banner.style.display = 'none';
   } else if (syncEnabled) {
     badge.className = 'sync-indicator offline';
-    label.textContent = 'Sign in';
-    status.innerHTML = '<p style="font-size:13px;color:var(--text-dim);">Firebase connected. Sign in to sync.</p>';
-    setupBtn.textContent = 'Sign In with Google';
-    setupBtn.onclick = signInWithGoogle;
+    label.textContent = 'Not synced';
+    status.innerHTML = '<p style="font-size:13px;color:var(--text-dim);">Set up a sync code to sync across devices.</p>';
     setupBtn.style.display = '';
     signOutBtn.style.display = 'none';
     banner.style.display = '';
   } else {
     badge.className = 'sync-indicator offline';
     label.textContent = 'Offline';
-    status.innerHTML = '<p style="font-size:13px;color:var(--text-dim);">Not connected</p>';
-    setupBtn.textContent = 'Set Up Sync';
-    setupBtn.onclick = showSetup;
-    setupBtn.style.display = '';
+    status.innerHTML = '<p style="font-size:13px;color:var(--text-dim);">Loading sync...</p>';
+    setupBtn.style.display = 'none';
     signOutBtn.style.display = 'none';
-    banner.style.display = '';
+    banner.style.display = 'none';
   }
 }
 
@@ -1260,90 +1262,93 @@ function setSyncing() {
   badge.className = 'sync-indicator syncing';
   label.textContent = 'Syncing...';
   clearTimeout(badge._timer);
-  badge._timer = setTimeout(() => { if (currentUser) { badge.className = 'sync-indicator synced'; label.textContent = 'Synced'; } }, 1500);
-}
-
-// ── Auth ──
-function signInWithGoogle() {
-  if (!auth) return;
-  const provider = new firebase.auth.GoogleAuthProvider();
-  // Use redirect on mobile (popups are blocked in mobile Safari)
-  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-  if (isMobile) {
-    auth.signInWithRedirect(provider);
-  } else {
-    auth.signInWithPopup(provider).catch(e => {
-      if (e.code === 'auth/popup-blocked' || e.code === 'auth/cancelled-popup-request') {
-        auth.signInWithRedirect(provider);
-      } else {
-        showToast('Sign-in failed: ' + e.message);
-      }
-    });
-  }
-}
-function signOut() {
-  if (!auth) return;
-  stopRealtimeSync();
-  auth.signOut();
-  showToast('Signed out');
+  badge._timer = setTimeout(() => {
+    if (syncConnected) {
+      badge.className = 'sync-indicator synced';
+      label.textContent = 'Synced';
+    }
+  }, 1500);
 }
 
 // ── Setup overlay ──
 function showSetup() {
-  if (syncEnabled && !currentUser) {
-    signInWithGoogle();
-    return;
+  const overlay = document.getElementById('setupOverlay');
+  const codeDisplay = document.getElementById('syncCodeDisplay');
+  const codeInput = document.getElementById('syncCodeInput');
+
+  // If already has a code, show it
+  if (syncCode) {
+    codeDisplay.style.display = '';
+    document.getElementById('syncCodeValue').textContent = syncCode;
+  } else {
+    codeDisplay.style.display = 'none';
   }
-  const cfg = getFirebaseConfig();
-  if (cfg) {
-    document.getElementById('cfgApiKey').value = cfg.apiKey || '';
-    document.getElementById('cfgAuthDomain').value = cfg.authDomain || '';
-    document.getElementById('cfgProjectId').value = cfg.projectId || '';
-  }
-  document.getElementById('setupOverlay').style.display = '';
+  codeInput.value = '';
+  document.getElementById('setupError').style.display = 'none';
+  overlay.style.display = '';
 }
+
 function skipSetup() {
   document.getElementById('setupOverlay').style.display = 'none';
 }
-function saveFirebaseConfig() {
-  const apiKey = document.getElementById('cfgApiKey').value.trim();
-  const authDomain = document.getElementById('cfgAuthDomain').value.trim();
-  const projectId = document.getElementById('cfgProjectId').value.trim();
+
+function generateNewCode() {
+  const code = generateCode();
+  syncCode = code;
+  setSyncCode(code);
+  syncConnected = true;
+
+  document.getElementById('syncCodeDisplay').style.display = '';
+  document.getElementById('syncCodeValue').textContent = code;
+
+  startRealtimeSync();
+  updateSyncUI();
+  showToast('Sync code created: ' + code);
+}
+
+function connectWithCode() {
+  const input = document.getElementById('syncCodeInput').value.trim().toUpperCase();
   const errEl = document.getElementById('setupError');
 
-  if (!apiKey || !authDomain || !projectId) {
-    errEl.textContent = 'Please fill in all three fields.';
+  if (!input || input.length < 4) {
+    errEl.textContent = 'Please enter a valid sync code.';
     errEl.style.display = 'block';
     return;
   }
 
-  const cfg = { apiKey, authDomain, projectId };
-  setFirebaseConfig(cfg);
   errEl.style.display = 'none';
-  document.getElementById('setupOverlay').style.display = 'none';
+  syncCode = input;
+  setSyncCode(input);
+  syncConnected = true;
 
-  // Re-init
-  if (firebase.apps.length) {
-    firebase.app().delete().then(() => { initFirebase(); signInWithGoogle(); });
-  } else {
-    initFirebase();
-    signInWithGoogle();
-  }
+  stopRealtimeSync();
+  startRealtimeSync();
+  updateSyncUI();
+  document.getElementById('setupOverlay').style.display = 'none';
+  showToast('Connected with code: ' + input);
+}
+
+function disconnectSync() {
+  stopRealtimeSync();
+  clearSyncCode();
+  syncCode = null;
+  syncConnected = false;
+  updateSyncUI();
+  showToast('Sync disconnected');
 }
 
 // ── Realtime Sync ──
 function startRealtimeSync() {
-  if (!db || !currentUser) return;
-  const uid = currentUser.uid;
+  if (!db || !syncCode) return;
   setSyncing();
 
   // Listen to words collection
-  unsubWords = db.collection('users').doc(uid).collection('words')
+  unsubWords = db.collection('sync').doc(syncCode).collection('words')
     .onSnapshot(snap => {
       const cloudWords = [];
       snap.forEach(doc => cloudWords.push(doc.data()));
 
-      // Merge: cloud wins for existing, add new from both sides
+      // Merge: use updatedAt to resolve conflicts
       const cloudMap = new Map(cloudWords.map(w => [w.id, w]));
       const localMap = new Map(words.map(w => [w.id, w]));
 
@@ -1367,14 +1372,14 @@ function startRealtimeSync() {
       // Push any local-only words to cloud
       merged.forEach(w => {
         if (!cloudMap.has(w.id)) {
-          db.collection('users').doc(uid).collection('words').doc(w.id).set(w);
+          db.collection('sync').doc(syncCode).collection('words').doc(w.id).set(w);
         }
       });
       setSyncing();
     }, err => console.error('Words sync error:', err));
 
   // Listen to dismissed words
-  unsubDismissed = db.collection('users').doc(uid).collection('settings')
+  unsubDismissed = db.collection('sync').doc(syncCode).collection('settings')
     .doc('dismissed').onSnapshot(doc => {
       if (doc.exists) {
         const data = doc.data();
@@ -1383,13 +1388,13 @@ function startRealtimeSync() {
         dismissedDict = merged;
         saveDismissedLocal();
         if (merged.size !== cloudSet.size) {
-          db.collection('users').doc(uid).collection('settings')
+          db.collection('sync').doc(syncCode).collection('settings')
             .doc('dismissed').set({ words: [...merged] });
         }
         try { renderDict(); } catch(e) {}
       } else {
         if (dismissedDict.size > 0) {
-          db.collection('users').doc(uid).collection('settings')
+          db.collection('sync').doc(syncCode).collection('settings')
             .doc('dismissed').set({ words: [...dismissedDict] });
         }
       }
@@ -1403,29 +1408,26 @@ function stopRealtimeSync() {
 }
 
 function syncWordsToCloud() {
-  if (!db || !currentUser) return;
-  const uid = currentUser.uid;
+  if (!db || !syncCode) return;
   const batch = db.batch();
   words.forEach(w => {
-    batch.set(db.collection('users').doc(uid).collection('words').doc(w.id), w);
+    batch.set(db.collection('sync').doc(syncCode).collection('words').doc(w.id), w);
   });
   batch.commit().catch(e => console.error('Sync words error:', e));
   setSyncing();
 }
 
 function syncDismissedToCloud() {
-  if (!db || !currentUser) return;
-  const uid = currentUser.uid;
-  db.collection('users').doc(uid).collection('settings')
+  if (!db || !syncCode) return;
+  db.collection('sync').doc(syncCode).collection('settings')
     .doc('dismissed').set({ words: [...dismissedDict] })
     .catch(e => console.error('Sync dismissed error:', e));
   setSyncing();
 }
 
 function deleteWordFromCloud(wordId) {
-  if (!db || !currentUser) return;
-  const uid = currentUser.uid;
-  db.collection('users').doc(uid).collection('words').doc(wordId).delete()
+  if (!db || !syncCode) return;
+  db.collection('sync').doc(syncCode).collection('words').doc(wordId).delete()
     .catch(e => console.error('Delete word from cloud error:', e));
   setSyncing();
 }
@@ -1435,9 +1437,6 @@ loadWords();
 loadDismissed();
 renderList();
 updateStats();
-
-// Show sign-in banner immediately
-document.getElementById('signInBanner').style.display = '';
 
 // Init Firebase after SDK loads (deferred)
 function tryInitFirebase() {
