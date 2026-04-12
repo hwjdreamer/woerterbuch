@@ -889,7 +889,7 @@
 </head>
 <body>
 
-<\!-- ═══ FIREBASE SETUP OVERLAY ═══ -->
+<!-- ═══ FIREBASE SETUP OVERLAY ═══ -->
 <div class="setup-overlay" id="setupOverlay" style="display:none;">
   <h2>&#9729;&#65039; Cloud Sync Setup</h2>
   <p class="setup-sub">Sync your vocabulary across iPhone, iPad, and any device. One-time setup takes ~3 minutes.</p>
@@ -1156,7 +1156,7 @@ function restoreDictWord(deWord) {
   renderDict();
 }
 function toggleShowDismissed() {
-  showDismissed = \!showDismissed;
+  showDismissed = !showDismissed;
   document.getElementById('dictHiddenToggle').classList.toggle('active', showDismissed);
   document.getElementById('dictHiddenToggle').textContent = showDismissed ? 'Hide dismissed words' : 'Show hidden words';
   renderDict();
@@ -1184,7 +1184,7 @@ function initFirebase() {
   const cfg = getFirebaseConfig();
   if (!cfg) return;
   try {
-    if (\!firebase.apps.length) {
+    if (!firebase.apps.length) {
       firebase.initializeApp(cfg);
     }
     auth = firebase.auth();
@@ -1253,7 +1253,7 @@ function setSyncing() {
 
 // ── Auth ──
 function signInWithGoogle() {
-  if (\!auth) return;
+  if (!auth) return;
   const provider = new firebase.auth.GoogleAuthProvider();
   auth.signInWithPopup(provider).catch(e => {
     // Popup blocked on mobile? Try redirect
@@ -1265,7 +1265,7 @@ function signInWithGoogle() {
   });
 }
 function signOut() {
-  if (\!auth) return;
+  if (!auth) return;
   stopRealtimeSync();
   auth.signOut();
   showToast('Signed out');
@@ -1273,7 +1273,7 @@ function signOut() {
 
 // ── Setup overlay ──
 function showSetup() {
-  if (syncEnabled && \!currentUser) {
+  if (syncEnabled && !currentUser) {
     signInWithGoogle();
     return;
   }
@@ -1294,7 +1294,7 @@ function saveFirebaseConfig() {
   const projectId = document.getElementById('cfgProjectId').value.trim();
   const errEl = document.getElementById('setupError');
 
-  if (\!apiKey || \!authDomain || \!projectId) {
+  if (!apiKey || !authDomain || !projectId) {
     errEl.textContent = 'Please fill in all three fields.';
     errEl.style.display = 'block';
     return;
@@ -1316,7 +1316,7 @@ function saveFirebaseConfig() {
 
 // ── Realtime Sync ──
 function startRealtimeSync() {
-  if (\!db || \!currentUser) return;
+  if (!db || !currentUser) return;
   const uid = currentUser.uid;
   setSyncing();
 
@@ -1349,7 +1349,7 @@ function startRealtimeSync() {
 
       // Push any local-only words to cloud
       merged.forEach(w => {
-        if (\!cloudMap.has(w.id)) {
+        if (!cloudMap.has(w.id)) {
           db.collection('users').doc(uid).collection('words').doc(w.id).set(w);
         }
       });
@@ -1365,7 +1365,7 @@ function startRealtimeSync() {
         const merged = new Set([...dismissedDict, ...cloudSet]);
         dismissedDict = merged;
         saveDismissedLocal();
-        if (merged.size \!== cloudSet.size) {
+        if (merged.size !== cloudSet.size) {
           db.collection('users').doc(uid).collection('settings')
             .doc('dismissed').set({ words: [...merged] });
         }
@@ -1386,7 +1386,7 @@ function stopRealtimeSync() {
 }
 
 function syncWordsToCloud() {
-  if (\!db || \!currentUser) return;
+  if (!db || !currentUser) return;
   const uid = currentUser.uid;
   const batch = db.batch();
   words.forEach(w => {
@@ -5663,7 +5663,7 @@ function addFromDict(deWord) {
 
   // Check if already in user's list
   if (words.some(w => w.german.toLowerCase() === entry.de.toLowerCase())) {
-    showToast('Already in your word list\!');
+    showToast('Already in your word list!');
     return;
   }
 
