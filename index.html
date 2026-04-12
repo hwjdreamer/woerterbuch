@@ -886,10 +886,6 @@
 
 </style>
 
-<\!-- Firebase SDK -->
-<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 </head>
 <body>
 
@@ -1102,6 +1098,11 @@
   </button>
 </div>
 
+<!-- Firebase SDK (loaded async, non-blocking) -->
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js" defer></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js" defer></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js" defer></script>
+
 <script>
 // ── Data Layer ──
 let words = [];
@@ -1179,8 +1180,9 @@ function setFirebaseConfig(cfg) {
 }
 
 function initFirebase() {
+  if (typeof firebase === 'undefined') return;
   const cfg = getFirebaseConfig();
-  if (\!cfg) return;
+  if (!cfg) return;
   try {
     if (\!firebase.apps.length) {
       firebase.initializeApp(cfg);
@@ -1414,9 +1416,22 @@ function deleteWordFromCloud(wordId) {
 // ── Init ──
 loadWords();
 loadDismissed();
-initFirebase();
 renderList();
 updateStats();
+
+// Init Firebase after SDK loads (deferred)
+function tryInitFirebase() {
+  if (typeof firebase !== 'undefined') {
+    initFirebase();
+  } else {
+    setTimeout(tryInitFirebase, 300);
+  }
+}
+if (document.readyState === 'complete') {
+  tryInitFirebase();
+} else {
+  window.addEventListener('load', tryInitFirebase);
+}
 
 // ── Tab Switching ──
 function switchTab(tab) {
