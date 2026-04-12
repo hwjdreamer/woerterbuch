@@ -819,14 +819,16 @@
     display: flex;
     align-items: center;
     gap: 6px;
-    font-size: 12px;
+    font-size: 13px;
     color: var(--text-dim);
     cursor: pointer;
-    padding: 4px 10px;
+    padding: 8px 14px;
+    min-height: 44px;
     border-radius: 20px;
     background: var(--surface);
     border: none;
     transition: background 0.15s;
+    -webkit-tap-highlight-color: rgba(233,69,96,0.2);
   }
   .sync-indicator:active { background: var(--card); }
   .sync-indicator .sync-dot {
@@ -1041,8 +1043,8 @@
       <div id="syncStatus">
         <p style="font-size:13px;color:var(--text-dim);">Not connected</p>
       </div>
-      <button class="btn-small" onclick="showSetup()" id="syncSetupBtn">Set Up Sync</button>
-      <button class="btn-small" onclick="signOut()" id="syncSignOutBtn" style="display:none;">Sign Out</button>
+      <button class="btn-small" onclick="showSetup()" id="syncSetupBtn" style="min-height:44px;padding:12px 20px;background:var(--accent);color:#fff;">Set Up Sync</button>
+      <button class="btn-small" onclick="signOut()" id="syncSignOutBtn" style="display:none;min-height:44px;padding:12px 20px;">Sign Out</button>
     </div>
 
     <div class="data-section">
