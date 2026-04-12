@@ -934,15 +934,14 @@
   <div class="header">
     <h1>Wenjins Wörterbuch</h1>
     <span class="count" id="wordCount">0 words</span>
-    <button class="sync-indicator offline" id="syncBadge" onclick="showSetup()" title="Sync status"><span class="sync-dot"></span><span id="syncLabel">Offline</span></button>
+    <span class="sync-indicator offline" id="syncBadge"><span class="sync-dot"></span><span id="syncLabel">Offline</span></span>
+  </div>
+  <div id="signInBanner" style="padding:10px 20px;display:none;position:relative;z-index:50;">
+    <a href="javascript:void(0)" id="syncLink" style="display:block;padding:14px;background:var(--accent);color:#fff;font-size:16px;font-weight:600;text-align:center;border-radius:12px;text-decoration:none;min-height:50px;line-height:22px;">Set Up Sync</a>
   </div>
   <div class="search-wrap">
     <span class="icon">&#128269;</span>
     <input type="text" id="searchInput" placeholder="Search words..." autocomplete="off">
-  </div>
-  <div id="signInBanner" style="margin:0 20px 12px;padding:16px;background:var(--surface);border-radius:14px;text-align:center;display:none;">
-    <p style="font-size:14px;color:var(--text-dim);margin-bottom:12px;">Sync words across iPhone, iPad &amp; more</p>
-    <button onclick="showSetup()" style="width:100%;padding:14px;border:none;border-radius:12px;background:var(--accent);color:#fff;font-size:16px;font-weight:600;cursor:pointer;min-height:50px;">Set Up Sync</button>
   </div>
   <div class="filter-bar" id="wordTypeFilterBar"></div>
   <div class="filter-bar" id="filterBar"></div>
@@ -5708,6 +5707,16 @@ function addFromDict(deWord) {
 }
 
 document.getElementById('dictSearchInput').addEventListener('input', renderDict);
+
+// Wire up sync link (using addEventListener for mobile Safari compatibility)
+document.getElementById('syncLink').addEventListener('click', function(e) {
+  e.preventDefault();
+  showSetup();
+});
+document.getElementById('syncLink').addEventListener('touchend', function(e) {
+  e.preventDefault();
+  showSetup();
+});
 
 </script>
 </body>
