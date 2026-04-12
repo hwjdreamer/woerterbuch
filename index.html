@@ -940,6 +940,10 @@
     <span class="icon">&#128269;</span>
     <input type="text" id="searchInput" placeholder="Search words..." autocomplete="off">
   </div>
+  <div id="signInBanner" style="margin:0 20px 12px;padding:16px;background:var(--surface);border-radius:14px;text-align:center;display:none;">
+    <p style="font-size:14px;color:var(--text-dim);margin-bottom:12px;">Sign in to sync words across your devices</p>
+    <button onclick="signInWithGoogle()" style="width:100%;padding:14px;border:none;border-radius:12px;background:var(--accent);color:#fff;font-size:16px;font-weight:600;cursor:pointer;min-height:50px;">Sign In with Google</button>
+  </div>
   <div class="filter-bar" id="wordTypeFilterBar"></div>
   <div class="filter-bar" id="filterBar"></div>
   <div class="word-list" id="wordList"></div>
@@ -1174,17 +1178,18 @@ let unsubWords = null;
 let unsubDismissed = null;
 let syncEnabled = false;
 
-function getFirebaseConfig() {
-  try { return JSON.parse(localStorage.getItem('wenjin_firebase_config')); } catch { return null; }
-}
-function setFirebaseConfig(cfg) {
-  localStorage.setItem('wenjin_firebase_config', JSON.stringify(cfg));
-}
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyDaNOhWh7Ua8kToy_cualh70pF7LOpBKW8",
+  authDomain: "woerterbuch-wj.firebaseapp.com",
+  projectId: "woerterbuch-wj"
+};
+
+function getFirebaseConfig() { return FIREBASE_CONFIG; }
+function setFirebaseConfig(cfg) {}
 
 function initFirebase() {
   if (typeof firebase === 'undefined') return;
-  const cfg = getFirebaseConfig();
-  if (!cfg) return;
+  const cfg = FIREBASE_CONFIG;
   try {
     if (!firebase.apps.length) {
       firebase.initializeApp(cfg);
@@ -1216,6 +1221,8 @@ function updateSyncUI() {
   const setupBtn = document.getElementById('syncSetupBtn');
   const signOutBtn = document.getElementById('syncSignOutBtn');
 
+  const banner = document.getElementById('signInBanner');
+
   if (currentUser) {
     badge.className = 'sync-indicator synced';
     label.textContent = 'Synced';
@@ -1225,6 +1232,7 @@ function updateSyncUI() {
       '<p style="font-size:12px;color:var(--green);">\u2713 Real-time sync active</p>';
     setupBtn.style.display = 'none';
     signOutBtn.style.display = '';
+    banner.style.display = 'none';
   } else if (syncEnabled) {
     badge.className = 'sync-indicator offline';
     label.textContent = 'Sign in';
@@ -1233,6 +1241,7 @@ function updateSyncUI() {
     setupBtn.onclick = signInWithGoogle;
     setupBtn.style.display = '';
     signOutBtn.style.display = 'none';
+    banner.style.display = '';
   } else {
     badge.className = 'sync-indicator offline';
     label.textContent = 'Offline';
@@ -1241,6 +1250,7 @@ function updateSyncUI() {
     setupBtn.onclick = showSetup;
     setupBtn.style.display = '';
     signOutBtn.style.display = 'none';
+    banner.style.display = '';
   }
 }
 
@@ -1425,6 +1435,9 @@ loadWords();
 loadDismissed();
 renderList();
 updateStats();
+
+// Show sign-in banner immediately
+document.getElementById('signInBanner').style.display = '';
 
 // Init Firebase after SDK loads (deferred)
 function tryInitFirebase() {
