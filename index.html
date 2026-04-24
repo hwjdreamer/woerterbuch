@@ -748,6 +748,42 @@
     background: rgba(46,204,113,0.15);
     color: var(--green);
   }
+  .dict-actions {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 4px;
+    flex-shrink: 0;
+  }
+  .dict-actions .dict-top-row {
+    display: flex;
+    gap: 4px;
+  }
+  .dict-choice-row {
+    display: none;
+    gap: 4px;
+  }
+  .dict-choice-row.show {
+    display: flex;
+  }
+  .dict-choice-btn {
+    border: none;
+    border-radius: 8px;
+    padding: 5px 10px;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: transform 0.1s;
+  }
+  .dict-choice-btn:active { transform: scale(0.93); }
+  .dict-choice-btn.words-btn {
+    background: rgba(233,69,96,0.2);
+    color: var(--accent-light);
+  }
+  .dict-choice-btn.list-btn {
+    background: rgba(155,89,182,0.2);
+    color: #9b59b6;
+  }
   .dict-dismiss-btn {
     flex-shrink: 0;
     width: 36px;
@@ -6381,8 +6417,16 @@ function renderDict() {
       </div>
       ${isDismissed
         ? `<button class="dict-restore-btn" onclick="restoreDictWord('${esc(d.de).replace(/'/g, "\\'")}')" title="Restore word">&#8635;</button>`
-        : `<button class="dict-add-btn ${isAdded ? 'added' : ''}" onclick="addFromDict('${esc(d.de).replace(/'/g, "\\'")}')" title="${addedTitle}">${addedLabel}</button>
-      <button class="dict-dismiss-btn" onclick="dismissDictWord('${esc(d.de).replace(/'/g, "\\'")}')" title="Hide word (already know it)">&#10060;</button>`}
+        : `<div class="dict-actions">
+        <div class="dict-top-row">
+          <button class="dict-add-btn ${isAdded ? 'added' : ''}" onclick="toggleDictChoice(this, '${esc(d.de).replace(/'/g, "\\'")}')" title="${addedTitle}">${addedLabel}</button>
+          <button class="dict-dismiss-btn" onclick="dismissDictWord('${esc(d.de).replace(/'/g, "\\'")}')" title="Hide word (already know it)">&#10060;</button>
+        </div>
+        <div class="dict-choice-row" data-word="${esc(d.de)}">
+          <button class="dict-choice-btn words-btn" onclick="addToWords('${esc(d.de).replace(/'/g, "\\'")}')">Words</button>
+          <button class="dict-choice-btn list-btn" onclick="addToList('${esc(d.de).replace(/'/g, "\\'")}')">List</button>
+        </div>
+      </div>`}
     </div>`;
   }).join('') + `<div class="dict-count">Showing ${active.length} of ${DICTIONARY.length - dismissedDict.size} active words${dismissedDict.size > 0 ? ' · ' + dismissedDict.size + ' hidden' : ''}</div>`;
 }
@@ -6395,37 +6439,50 @@ function filterDictLevel(level) {
   renderDict();
 }
 
-function addFromDict(deWord) {
+function toggleDictChoice(btn, deWord) {
+  var inWords = words.some(function(w) { return w.german.toLowerCase() === deWord.toLowerCase(); });
+  var inWlist = wordlist.some(function(w) { return w.german.toLowerCase() === deWord.toLowerCase(); });
+  if (inWords && inWlist) { showToast('Already in both lists!'); return; }
+  if (inWords) { showToast('Already in Words!'); return; }
+  if (inWlist) { showToast('Already in List!'); return; }
+
+  // Close any other open choice rows
+  document.querySelectorAll('.dict-choice-row.show').forEach(function(r) {
+    r.classList.remove('show');
+  });
+  // Show this one
+  var actions = btn.closest('.dict-actions');
+  var row = actions.querySelector('.dict-choice-row');
+  row.classList.add('show');
+}
+
+function addToWords(deWord) {
   var entry = DICTIONARY.find(function(d) { return d.de === deWord; });
   if (!entry) return;
-
-  var inWords = words.some(function(w) { return w.german.toLowerCase() === entry.de.toLowerCase(); });
-  var inWlist = wordlist.some(function(w) { return w.german.toLowerCase() === entry.de.toLowerCase(); });
-
-  if (inWords && inWlist) {
-    showToast('Already in both lists!');
-    return;
+  if (words.some(function(w) { return w.german.toLowerCase() === entry.de.toLowerCase(); })) {
+    showToast('Already in Words!'); return;
   }
+  words.push({
+    id: 'w' + Date.now() + Math.random().toString(36).slice(2, 6),
+    german: entry.de, english: entry.en, chinese: entry.zh,
+    wordType: entry.type,
+    gender: entry.type === 'Nomen' ? autoDetectGender(entry.de) : '',
+    plural: '', grammar: '', examples: [], example: '',
+    category: entry.level,
+    createdAt: Date.now(), updatedAt: Date.now()
+  });
+  saveWords();
+  showToast('Added to Words: ' + entry.de);
+  renderDict();
+}
 
-  var choice = confirm(entry.de + '\n\nOK = Add to Words (active study)\nCancel = Add to List (saved for later)');
-
-  if (choice) {
-    if (inWords) { showToast('Already in Words!'); return; }
-    words.push({
-      id: 'w' + Date.now() + Math.random().toString(36).slice(2, 6),
-      german: entry.de, english: entry.en, chinese: entry.zh,
-      wordType: entry.type,
-      gender: entry.type === 'Nomen' ? autoDetectGender(entry.de) : '',
-      plural: '', grammar: '', examples: [], example: '',
-      category: entry.level,
-      createdAt: Date.now(), updatedAt: Date.now()
-    });
-    saveWords();
-    showToast('Added to Words: ' + entry.de);
-  } else {
-    if (inWlist) { showToast('Already in List!'); return; }
-    addToWordlist(entry);
+function addToList(deWord) {
+  var entry = DICTIONARY.find(function(d) { return d.de === deWord; });
+  if (!entry) return;
+  if (wordlist.some(function(w) { return w.german.toLowerCase() === entry.de.toLowerCase(); })) {
+    showToast('Already in List!'); return;
   }
+  addToWordlist(entry);
   renderDict();
 }
 
