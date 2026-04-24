@@ -976,6 +976,10 @@
   <div class="header">
     <h1>Words List</h1>
     <span class="count" id="wlistCount">0 words</span>
+    <span class="sync-indicator offline" id="syncBadge2"><span class="sync-dot"></span><span id="syncLabel2">Offline</span></span>
+  </div>
+  <div id="signInBanner2" style="padding:10px 20px;display:none;position:relative;z-index:50;">
+    <a href="javascript:void(0)" id="syncLink2" style="display:block;padding:14px;background:var(--accent);color:#fff;font-size:16px;font-weight:600;text-align:center;border-radius:12px;text-decoration:none;min-height:50px;line-height:22px;">Set Up Sync</a>
   </div>
   <div class="search-wrap">
     <span class="icon">&#128269;</span>
@@ -1300,41 +1304,60 @@ function updateSyncUI() {
   const signOutBtn = document.getElementById('syncSignOutBtn');
   const banner = document.getElementById('signInBanner');
 
+  var badge2 = document.getElementById('syncBadge2');
+  var label2 = document.getElementById('syncLabel2');
+  var banner2 = document.getElementById('signInBanner2');
+
   if (syncConnected && syncCode) {
     badge.className = 'sync-indicator synced';
     label.textContent = 'Synced';
+    badge2.className = 'sync-indicator synced';
+    label2.textContent = 'Synced';
     status.innerHTML = '<p style="font-size:14px;color:var(--text);">Sync code: <b style="letter-spacing:2px;color:var(--accent);">' + syncCode + '</b></p>' +
       '<p style="font-size:12px;color:var(--green);margin-top:4px;">\u2713 Real-time sync active</p>';
     setupBtn.style.display = 'none';
     signOutBtn.style.display = '';
     banner.style.display = 'none';
+    banner2.style.display = 'none';
   } else if (syncEnabled) {
     badge.className = 'sync-indicator offline';
     label.textContent = 'Not synced';
+    badge2.className = 'sync-indicator offline';
+    label2.textContent = 'Not synced';
     status.innerHTML = '<p style="font-size:13px;color:var(--text-dim);">Set up a sync code to sync across devices.</p>';
     setupBtn.style.display = '';
     signOutBtn.style.display = 'none';
     banner.style.display = '';
+    banner2.style.display = '';
   } else {
     badge.className = 'sync-indicator offline';
     label.textContent = 'Offline';
+    badge2.className = 'sync-indicator offline';
+    label2.textContent = 'Offline';
     status.innerHTML = '<p style="font-size:13px;color:var(--text-dim);">Loading sync...</p>';
     setupBtn.style.display = 'none';
     signOutBtn.style.display = 'none';
     banner.style.display = 'none';
+    banner2.style.display = 'none';
   }
 }
 
 function setSyncing() {
   const badge = document.getElementById('syncBadge');
   const label = document.getElementById('syncLabel');
+  const badge2 = document.getElementById('syncBadge2');
+  const label2 = document.getElementById('syncLabel2');
   badge.className = 'sync-indicator syncing';
   label.textContent = 'Syncing...';
+  badge2.className = 'sync-indicator syncing';
+  label2.textContent = 'Syncing...';
   clearTimeout(badge._timer);
   badge._timer = setTimeout(() => {
     if (syncConnected) {
       badge.className = 'sync-indicator synced';
       label.textContent = 'Synced';
+      badge2.className = 'sync-indicator synced';
+      label2.textContent = 'Synced';
     }
   }, 1500);
 }
@@ -6458,6 +6481,14 @@ document.getElementById('syncLink').addEventListener('click', function(e) {
   showSetup();
 });
 document.getElementById('syncLink').addEventListener('touchend', function(e) {
+  e.preventDefault();
+  showSetup();
+});
+document.getElementById('syncLink2').addEventListener('click', function(e) {
+  e.preventDefault();
+  showSetup();
+});
+document.getElementById('syncLink2').addEventListener('touchend', function(e) {
   e.preventDefault();
   showSetup();
 });
