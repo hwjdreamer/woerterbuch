@@ -1171,8 +1171,13 @@ let editingId = null;
 let editingSource = 'words'; // 'words' or 'wlist'
 let activeCategory = null;
 let activeWordType = null;
-let deletedWordIds = new Set();
-let deletedWlistIds = new Set();
+let deletedWordIds = new Set(JSON.parse(localStorage.getItem('wenjin_deleted_words') || '[]'));
+let deletedWlistIds = new Set(JSON.parse(localStorage.getItem('wenjin_deleted_wlist') || '[]'));
+
+function saveDeletedIds() {
+  localStorage.setItem('wenjin_deleted_words', JSON.stringify([...deletedWordIds]));
+  localStorage.setItem('wenjin_deleted_wlist', JSON.stringify([...deletedWlistIds]));
+}
 
 // ── Words List Data Layer ──
 let wordlist = [];
@@ -1541,6 +1546,10 @@ function syncDismissedToCloud() {
 function deleteWordFromCloud(wordId) {
   if (!db || !syncCode) return;
   db.collection('sync').doc(syncCode).collection('words').doc(wordId).delete()
+    .then(function() {
+      deletedWordIds.delete(wordId);
+      saveDeletedIds();
+    })
     .catch(e => console.error('Delete word from cloud error:', e));
   setSyncing();
 }
@@ -1560,6 +1569,10 @@ function syncWordlistToCloud() {
 function deleteWlistWordFromCloud(wordId) {
   if (!db || !syncCode) return;
   db.collection('sync').doc(syncCode).collection('wordlist').doc(wordId).delete()
+    .then(function() {
+      deletedWlistIds.delete(wordId);
+      saveDeletedIds();
+    })
     .catch(function(e) { console.error('Delete wlist word error:', e); });
 }
 
@@ -1817,8 +1830,9 @@ function editWlistWord(id) {
 function removeWlistWord(id) {
   if (!confirm('Remove this word from your list?')) return;
   deletedWlistIds.add(id);
+  saveDeletedIds();
   wordlist = wordlist.filter(function(x) { return x.id !== id; });
-  saveWordlist();
+  saveWordlistLocal();
   deleteWlistWordFromCloud(id);
   showToast('Removed');
   renderWordlist();
@@ -2184,13 +2198,15 @@ function promptDelete() {
     var source = editingSource;
     if (source === 'wlist') {
       deletedWlistIds.add(deletedId);
+      saveDeletedIds();
       wordlist = wordlist.filter(function(w) { return w.id !== deletedId; });
-      saveWordlist();
+      saveWordlistLocal();
       deleteWlistWordFromCloud(deletedId);
     } else {
       deletedWordIds.add(deletedId);
+      saveDeletedIds();
       words = words.filter(function(w) { return w.id !== deletedId; });
-      saveWords();
+      saveWordsLocal();
       deleteWordFromCloud(deletedId);
     }
     closeConfirm();
