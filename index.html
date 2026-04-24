@@ -1173,6 +1173,7 @@ let activeCategory = null;
 let activeWordType = null;
 let deletedWordIds = new Set(JSON.parse(localStorage.getItem('wenjin_deleted_words') || '[]'));
 let deletedWlistIds = new Set(JSON.parse(localStorage.getItem('wenjin_deleted_wlist') || '[]'));
+let syncPaused = false;
 
 function saveDeletedIds() {
   localStorage.setItem('wenjin_deleted_words', JSON.stringify([...deletedWordIds]));
@@ -1431,6 +1432,7 @@ function startRealtimeSync() {
   // Listen to words collection
   unsubWords = db.collection('sync').doc(syncCode).collection('words')
     .onSnapshot(snap => {
+      if (syncPaused) return;
       const cloudWords = [];
       snap.forEach(doc => cloudWords.push(doc.data()));
 
@@ -1447,7 +1449,6 @@ function startRealtimeSync() {
         if (c && l) {
           merged.push((c.updatedAt || 0) >= (l.updatedAt || 0) ? c : l);
         } else if (c && !l) {
-          // Only add cloud-only words if they weren't deleted locally
           merged.push(c);
         } else if (l) {
           merged.push(l);
@@ -1471,6 +1472,7 @@ function startRealtimeSync() {
   // Listen to wordlist collection
   unsubWordlist = db.collection('sync').doc(syncCode).collection('wordlist')
     .onSnapshot(function(snap) {
+      if (syncPaused) return;
       var cloudWL = [];
       snap.forEach(function(doc) { cloudWL.push(doc.data()); });
       var cloudMap = new Map(cloudWL.map(function(w) { return [w.id, w]; }));
@@ -1545,13 +1547,16 @@ function syncDismissedToCloud() {
 
 function deleteWordFromCloud(wordId) {
   if (!db || !syncCode) return;
+  syncPaused = true;
   db.collection('sync').doc(syncCode).collection('words').doc(wordId).delete()
     .then(function() {
-      deletedWordIds.delete(wordId);
-      saveDeletedIds();
+      syncPaused = false;
+      setSyncing();
     })
-    .catch(e => console.error('Delete word from cloud error:', e));
-  setSyncing();
+    .catch(function(e) {
+      console.error('Delete word from cloud error:', e);
+      syncPaused = false;
+    });
 }
 
 // ── Wordlist Cloud Sync ──
@@ -1568,12 +1573,15 @@ function syncWordlistToCloud() {
 
 function deleteWlistWordFromCloud(wordId) {
   if (!db || !syncCode) return;
+  syncPaused = true;
   db.collection('sync').doc(syncCode).collection('wordlist').doc(wordId).delete()
     .then(function() {
-      deletedWlistIds.delete(wordId);
-      saveDeletedIds();
+      syncPaused = false;
     })
-    .catch(function(e) { console.error('Delete wlist word error:', e); });
+    .catch(function(e) {
+      console.error('Delete wlist word error:', e);
+      syncPaused = false;
+    });
 }
 
 // ── Init ──
