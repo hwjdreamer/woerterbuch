@@ -1705,23 +1705,22 @@ function renderWordlist() {
     return;
   }
 
-  container.innerHTML = filtered.map(function(w) {
-    return '<div class="word-card" onclick="editWlistWord(\'' + w.id + '\')">' +
-      '<div class="actions" onclick="event.stopPropagation()">' +
-        '<button onclick="removeWlistWord(\'' + w.id + '\')" title="Remove">&#128465;</button>' +
-      '</div>' +
-      '<div class="german">' + esc(w.german) + (w.wordType ? '<span class="wtype-badge wtype-' + w.wordType + '">' + esc(w.wordType) + '</span>' : '') +
-        (w.gender ? '<span class="gender-badge gender-' + w.gender[0] + '">' + esc(w.gender) + '</span>' : '') + '</div>' +
-      (w.plural ? '<div class="plural-info">Plural: <span>' + esc(w.plural) + '</span></div>' : '') +
-      '<div class="translations">' +
-        '<span class="tag">EN: ' + esc(w.english) + '</span>' +
-        (w.chinese ? '<span class="tag cn">中: ' + esc(w.chinese) + '</span>' : '') +
-      '</div>' +
-      renderExamples(w) +
-      (w.grammar ? '<div class="grammar"><div class="grammar-label">Grammar</div>' + esc(w.grammar) + '</div>' : '') +
-      '<div class="date">' + (w.category ? esc(w.category) + ' \u00b7 ' : '') + formatDate(w.createdAt) + '</div>' +
-    '</div>';
-  }).join('');
+  container.innerHTML = filtered.map(w => `
+    <div class="word-card" onclick="editWlistWord('${w.id}')">
+      <div class="actions" onclick="event.stopPropagation()">
+        <button onclick="removeWlistWord('${w.id}')" title="Remove">&#128465;</button>
+      </div>
+      <div class="german">${esc(w.german)}${w.wordType ? `<span class="wtype-badge wtype-${w.wordType}">${esc(w.wordType)}</span>` : ''}${w.gender ? `<span class="gender-badge gender-${w.gender[0]}">${esc(w.gender)}</span>` : ''}</div>
+      ${w.plural ? `<div class="plural-info">Plural: <span>${esc(w.plural)}</span></div>` : ''}
+      <div class="translations">
+        <span class="tag">EN: ${esc(w.english)}</span>
+        ${w.chinese ? `<span class="tag cn">中: ${esc(w.chinese)}</span>` : ''}
+      </div>
+      ${renderExamples(w)}
+      ${w.grammar ? `<div class="grammar"><div class="grammar-label">Grammar</div>${esc(w.grammar)}</div>` : ''}
+      <div class="date">${w.category ? esc(w.category) + ' · ' : ''}${formatDate(w.createdAt)}</div>
+    </div>
+  `).join('');
 
   renderWlistWordTypeFilterBar();
   renderWlistFilterBar();
@@ -1786,8 +1785,10 @@ function editWlistWord(id) {
 
 function removeWlistWord(id) {
   if (!confirm('Remove this word from your list?')) return;
+  var deletedId = id;
   wordlist = wordlist.filter(function(x) { return x.id !== id; });
   saveWordlist();
+  deleteWlistWordFromCloud(deletedId);
   showToast('Removed');
   renderWordlist();
 }
