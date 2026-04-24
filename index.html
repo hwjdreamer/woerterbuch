@@ -726,63 +726,47 @@
   .dict-level-C1 { background: rgba(155,89,182,0.2); color: #9b59b6; }
   .dict-level-C2 { background: rgba(44,62,80,0.2); color: #7f8c8d; }
 
-  .dict-add-btn {
+  .dict-btn {
     flex-shrink: 0;
-    width: 36px;
-    height: 36px;
+    width: 32px;
+    height: 32px;
     border: none;
-    border-radius: 10px;
-    background: rgba(233,69,96,0.15);
-    color: var(--accent-light);
-    font-size: 20px;
+    border-radius: 8px;
+    font-size: 16px;
     font-weight: 400;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    margin-top: 2px;
     transition: transform 0.1s;
   }
-  .dict-add-btn:active { transform: scale(0.9); }
-  .dict-add-btn.added {
+  .dict-btn:active { transform: scale(0.9); }
+  .dict-btn-star {
+    background: rgba(243,156,18,0.15);
+    color: #f39c12;
+  }
+  .dict-btn-star.added {
     background: rgba(46,204,113,0.15);
     color: var(--green);
   }
-  .dict-actions {
+  .dict-btn-plus {
+    background: rgba(155,89,182,0.15);
+    color: #9b59b6;
+  }
+  .dict-btn-plus.added {
+    background: rgba(46,204,113,0.15);
+    color: var(--green);
+  }
+  .dict-btn-x {
+    background: rgba(160,160,184,0.1);
+    color: var(--text-dim);
+  }
+  .dict-btn-x:active { background: rgba(231,76,60,0.2); color: #e74c3c; }
+  .dict-btns {
     display: flex;
     flex-direction: column;
-    align-items: flex-end;
     gap: 4px;
     flex-shrink: 0;
-  }
-  .dict-actions .dict-top-row {
-    display: flex;
-    gap: 4px;
-  }
-  .dict-choice-row {
-    display: none;
-    gap: 4px;
-  }
-  .dict-choice-row.show {
-    display: flex;
-  }
-  .dict-choice-btn {
-    border: none;
-    border-radius: 8px;
-    padding: 5px 10px;
-    font-size: 11px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: transform 0.1s;
-  }
-  .dict-choice-btn:active { transform: scale(0.93); }
-  .dict-choice-btn.words-btn {
-    background: rgba(233,69,96,0.2);
-    color: var(--accent-light);
-  }
-  .dict-choice-btn.list-btn {
-    background: rgba(155,89,182,0.2);
-    color: #9b59b6;
   }
   .dict-dismiss-btn {
     flex-shrink: 0;
@@ -1732,6 +1716,7 @@ function renderWordlist() {
         '<span class="tag">EN: ' + esc(w.english) + '</span>' +
         (w.chinese ? '<span class="tag cn">中: ' + esc(w.chinese) + '</span>' : '') +
       '</div>' +
+      renderExamples(w) +
       (w.grammar ? '<div class="grammar"><div class="grammar-label">Grammar</div>' + esc(w.grammar) + '</div>' : '') +
       '<div class="date">' + (w.category ? esc(w.category) + ' \u00b7 ' : '') + formatDate(w.createdAt) + '</div>' +
     '</div>';
@@ -6401,34 +6386,27 @@ function renderDict() {
   container.innerHTML = display.map(d => {
     const inWords = userGerman.has(d.de.toLowerCase());
     const inWlist = wlistGerman.has(d.de.toLowerCase());
-    const isAdded = inWords || inWlist;
     const isDismissed = dismissedDict.has(d.de);
-    const addedLabel = inWords ? '&#10003;' : (inWlist ? '&#9734;' : '&#10133;');
-    const addedTitle = inWords ? 'In Words' : (inWlist ? 'In List' : 'Add');
+    const deSafe = esc(d.de).replace(/'/g, "\\'");
     return `
     <div class="dict-entry${isDismissed ? ' dismissed' : ''}">
       <div class="dict-info">
         <div class="dict-de">${esc(d.de)}</div>
-        <div class="dict-trans">${esc(d.en)} · ${esc(d.zh)}</div>
+        <div class="dict-trans">${esc(d.en)} \u00b7 ${esc(d.zh)}</div>
         <div class="dict-meta">
           <span class="dict-level dict-level-${d.level}">${d.level}</span>
           <span class="wtype-badge wtype-${d.type}">${d.type}</span>
         </div>
       </div>
       ${isDismissed
-        ? `<button class="dict-restore-btn" onclick="restoreDictWord('${esc(d.de).replace(/'/g, "\\'")}')" title="Restore word">&#8635;</button>`
-        : `<div class="dict-actions">
-        <div class="dict-top-row">
-          <button class="dict-add-btn ${isAdded ? 'added' : ''}" onclick="toggleDictChoice(this, '${esc(d.de).replace(/'/g, "\\'")}')" title="${addedTitle}">${addedLabel}</button>
-          <button class="dict-dismiss-btn" onclick="dismissDictWord('${esc(d.de).replace(/'/g, "\\'")}')" title="Hide word (already know it)">&#10060;</button>
-        </div>
-        <div class="dict-choice-row" data-word="${esc(d.de)}">
-          <button class="dict-choice-btn words-btn" onclick="addToWords('${esc(d.de).replace(/'/g, "\\'")}')">Words</button>
-          <button class="dict-choice-btn list-btn" onclick="addToList('${esc(d.de).replace(/'/g, "\\'")}')">List</button>
-        </div>
-      </div>`}
+        ? `<button class="dict-restore-btn" onclick="restoreDictWord('${deSafe}')" title="Restore word">&#8635;</button>`
+        : `<div class="dict-btns">
+          <button class="dict-btn dict-btn-star${inWords ? ' added' : ''}" onclick="addToWords('${deSafe}')" title="${inWords ? 'In Words' : 'Add to Words'}">${inWords ? '&#10003;' : '&#9733;'}</button>
+          <button class="dict-btn dict-btn-plus${inWlist ? ' added' : ''}" onclick="addToList('${deSafe}')" title="${inWlist ? 'In List' : 'Add to List'}">${inWlist ? '&#10003;' : '&#10133;'}</button>
+          <button class="dict-btn dict-btn-x" onclick="dismissDictWord('${deSafe}')" title="Hide">&#10005;</button>
+        </div>`}
     </div>`;
-  }).join('') + `<div class="dict-count">Showing ${active.length} of ${DICTIONARY.length - dismissedDict.size} active words${dismissedDict.size > 0 ? ' · ' + dismissedDict.size + ' hidden' : ''}</div>`;
+  }).join('') + `<div class="dict-count">Showing ${active.length} of ${DICTIONARY.length - dismissedDict.size} active words${dismissedDict.size > 0 ? ' \u00b7 ' + dismissedDict.size + ' hidden' : ''}</div>`
 }
 
 function filterDictLevel(level) {
@@ -6437,23 +6415,6 @@ function filterDictLevel(level) {
     c.classList.toggle('active', c.dataset.level === level);
   });
   renderDict();
-}
-
-function toggleDictChoice(btn, deWord) {
-  var inWords = words.some(function(w) { return w.german.toLowerCase() === deWord.toLowerCase(); });
-  var inWlist = wordlist.some(function(w) { return w.german.toLowerCase() === deWord.toLowerCase(); });
-  if (inWords && inWlist) { showToast('Already in both lists!'); return; }
-  if (inWords) { showToast('Already in Words!'); return; }
-  if (inWlist) { showToast('Already in List!'); return; }
-
-  // Close any other open choice rows
-  document.querySelectorAll('.dict-choice-row.show').forEach(function(r) {
-    r.classList.remove('show');
-  });
-  // Show this one
-  var actions = btn.closest('.dict-actions');
-  var row = actions.querySelector('.dict-choice-row');
-  row.classList.add('show');
 }
 
 function addToWords(deWord) {
