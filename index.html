@@ -950,6 +950,21 @@
   <div class="word-list" id="wordList"></div>
 </div>
 
+<!-- ═══ WORDS LIST VIEW ═══ -->
+<div class="view" id="wlistView">
+  <div class="header">
+    <h1>Words List</h1>
+    <span class="count" id="wlistCount">0 words</span>
+  </div>
+  <div class="search-wrap">
+    <span class="icon">&#128269;</span>
+    <input type="text" id="wlistSearchInput" placeholder="Search saved words..." autocomplete="off">
+  </div>
+  <div class="filter-bar" id="wlistWordTypeFilterBar"></div>
+  <div class="filter-bar" id="wlistFilterBar"></div>
+  <div class="word-list" id="wlistWordList"></div>
+</div>
+
 <!-- ═══ ADD VIEW ═══ -->
 <div class="view" id="addView">
   <div class="header">
@@ -961,6 +976,7 @@
       <div class="input-with-btn">
         <input type="text" id="fGerman" placeholder="e.g. die Bedeutung" autocapitalize="none">
         <button type="button" class="lookup-btn" id="lookupBtn" onclick="lookupWord()">Lookup</button>
+        <button type="button" class="lookup-btn" id="saveBtn" onclick="saveWord()" style="background:var(--green);margin-left:4px;">Save</button>
       </div>
     </div>
     <div class="field">
@@ -1011,7 +1027,7 @@
       <label>Category (optional)</label>
       <input type="text" id="fCategory" placeholder="e.g. Alltag, Arbeit, Reise...">
     </div>
-    <button class="btn btn-primary" id="saveBtn" onclick="saveWord()">Save Word</button>
+
     <button class="btn btn-secondary" onclick="cancelForm()">Cancel</button>
     <button class="btn btn-danger" id="deleteBtn" style="display:none" onclick="promptDelete()">Delete This Word</button>
   </div>
@@ -1101,6 +1117,10 @@
     <span class="tab-icon">&#128218;</span>
     Words
   </button>
+  <button onclick="switchTab('wlist')" id="tabWList">
+    <span class="tab-icon">&#128278;</span>
+    List
+  </button>
   <button onclick="switchTab('add')" id="tabAdd">
     <span class="tab-icon">&#10133;</span>
     Add
@@ -1125,6 +1145,23 @@ let words = [];
 let editingId = null;
 let activeCategory = null;
 let activeWordType = null;
+
+// ── Words List Data Layer ──
+let wordlist = [];
+let activeWLCategory = null;
+let activeWLWordType = null;
+
+function loadWordlistLocal() {
+  try { wordlist = JSON.parse(localStorage.getItem('wenjin_wordlist') || '[]'); } catch { wordlist = []; }
+}
+function saveWordlistLocal() {
+  localStorage.setItem('wenjin_wordlist', JSON.stringify(wordlist));
+}
+function loadWordlist() { loadWordlistLocal(); }
+function saveWordlist() {
+  saveWordlistLocal();
+  syncWordlistToCloud();
+}
 
 const WORD_TYPES = ['Nomen', 'Verb', 'Adjektiv', 'Adverb', 'Phrase', 'Präposition', 'Konjunktion', 'Andere'];
 
@@ -1375,6 +1412,31 @@ function startRealtimeSync() {
       setSyncing();
     }, err => console.error('Words sync error:', err));
 
+  // Listen to wordlist collection
+  unsubWordlist = db.collection('sync').doc(syncCode).collection('wordlist')
+    .onSnapshot(function(snap) {
+      var cloudWL = [];
+      snap.forEach(function(doc) { cloudWL.push(doc.data()); });
+      var cloudMap = new Map(cloudWL.map(function(w) { return [w.id, w]; }));
+      var localMap = new Map(wordlist.map(function(w) { return [w.id, w]; }));
+      var merged = [];
+      var allIds = new Set([].concat(Array.from(cloudMap.keys()), Array.from(localMap.keys())));
+      allIds.forEach(function(id) {
+        var c = cloudMap.get(id);
+        var l = localMap.get(id);
+        if (c && l) { merged.push((c.updatedAt || 0) >= (l.updatedAt || 0) ? c : l); }
+        else { merged.push(c || l); }
+      });
+      wordlist = merged;
+      saveWordlistLocal();
+      try { renderWordlist(); } catch(e) {}
+      merged.forEach(function(w) {
+        if (!cloudMap.has(w.id)) {
+          db.collection('sync').doc(syncCode).collection('wordlist').doc(w.id).set(w);
+        }
+      });
+    }, function(err) { console.error('Wordlist sync error:', err); });
+
   // Listen to dismissed words
   unsubDismissed = db.collection('sync').doc(syncCode).collection('settings')
     .doc('dismissed').onSnapshot(doc => {
@@ -1401,6 +1463,7 @@ function startRealtimeSync() {
 
 function stopRealtimeSync() {
   if (unsubWords) { unsubWords(); unsubWords = null; }
+  if (unsubWordlist) { unsubWordlist(); unsubWordlist = null; }
   if (unsubDismissed) { unsubDismissed(); unsubDismissed = null; }
 }
 
@@ -1429,9 +1492,28 @@ function deleteWordFromCloud(wordId) {
   setSyncing();
 }
 
+// ── Wordlist Cloud Sync ──
+let unsubWordlist = null;
+
+function syncWordlistToCloud() {
+  if (!db || !syncCode) return;
+  var batch = db.batch();
+  wordlist.forEach(function(w) {
+    batch.set(db.collection('sync').doc(syncCode).collection('wordlist').doc(w.id), w);
+  });
+  batch.commit().catch(function(e) { console.error('Sync wordlist error:', e); });
+}
+
+function deleteWlistWordFromCloud(wordId) {
+  if (!db || !syncCode) return;
+  db.collection('sync').doc(syncCode).collection('wordlist').doc(wordId).delete()
+    .catch(function(e) { console.error('Delete wlist word error:', e); });
+}
+
 // ── Init ──
 loadWords();
 loadDismissed();
+loadWordlist();
 renderList();
 updateStats();
 
@@ -1466,6 +1548,10 @@ function switchTab(tab) {
     document.getElementById('dictView').classList.add('active');
     document.getElementById('tabDict').classList.add('active');
     renderDict();
+  } else if (tab === 'wlist') {
+    document.getElementById('wlistView').classList.add('active');
+    document.getElementById('tabWList').classList.add('active');
+    renderWordlist();
   } else if (tab === 'stats') {
     document.getElementById('statsView').classList.add('active');
     document.getElementById('tabStats').classList.add('active');
@@ -1563,6 +1649,150 @@ function renderFilterBar() {
 function filterCategory(cat) {
   activeCategory = cat;
   renderList();
+}
+
+// ── Render Words List ──
+function renderWordlist() {
+  var query = document.getElementById('wlistSearchInput').value.toLowerCase().trim();
+  var filtered = wordlist;
+
+  if (query) {
+    filtered = filtered.filter(function(w) {
+      return w.german.toLowerCase().includes(query) ||
+        w.english.toLowerCase().includes(query) ||
+        w.chinese.includes(query) ||
+        (w.wordType || '').toLowerCase().includes(query) ||
+        (w.category || '').toLowerCase().includes(query);
+    });
+  }
+
+  if (activeWLWordType) {
+    filtered = filtered.filter(function(w) { return (w.wordType || '') === activeWLWordType; });
+  }
+  if (activeWLCategory) {
+    filtered = filtered.filter(function(w) { return (w.category || '').toLowerCase() === activeWLCategory.toLowerCase(); });
+  }
+
+  filtered.sort(function(a, b) { return b.createdAt - a.createdAt; });
+
+  var container = document.getElementById('wlistWordList');
+  document.getElementById('wlistCount').textContent = wordlist.length + (wordlist.length === 1 ? ' word' : ' words');
+
+  if (filtered.length === 0) {
+    container.innerHTML = '<div class="empty-state"><div class="big-icon">&#128278;</div>' +
+      '<p>' + (wordlist.length === 0 ? 'Your words list is empty.<br>Save words from the <strong>Dict</strong> tab!' : 'No matching words found.') + '</p></div>';
+    return;
+  }
+
+  container.innerHTML = filtered.map(function(w) {
+    return '<div class="word-card" onclick="editWlistWord(\'' + w.id + '\')">' +
+      '<div class="actions" onclick="event.stopPropagation()">' +
+        '<button onclick="removeWlistWord(\'' + w.id + '\')" title="Remove">&#128465;</button>' +
+      '</div>' +
+      '<div class="german">' + esc(w.german) + (w.wordType ? '<span class="wtype-badge wtype-' + w.wordType + '">' + esc(w.wordType) + '</span>' : '') +
+        (w.gender ? '<span class="gender-badge gender-' + w.gender[0] + '">' + esc(w.gender) + '</span>' : '') + '</div>' +
+      (w.plural ? '<div class="plural-info">Plural: <span>' + esc(w.plural) + '</span></div>' : '') +
+      '<div class="translations">' +
+        '<span class="tag">EN: ' + esc(w.english) + '</span>' +
+        (w.chinese ? '<span class="tag cn">中: ' + esc(w.chinese) + '</span>' : '') +
+      '</div>' +
+      (w.grammar ? '<div class="grammar"><div class="grammar-label">Grammar</div>' + esc(w.grammar) + '</div>' : '') +
+      '<div class="date">' + (w.category ? esc(w.category) + ' \u00b7 ' : '') + formatDate(w.createdAt) + '</div>' +
+    '</div>';
+  }).join('');
+
+  renderWlistWordTypeFilterBar();
+  renderWlistFilterBar();
+}
+
+function renderWlistWordTypeFilterBar() {
+  var typesInUse = [];
+  wordlist.forEach(function(w) { if (w.wordType && typesInUse.indexOf(w.wordType) === -1) typesInUse.push(w.wordType); });
+  var bar = document.getElementById('wlistWordTypeFilterBar');
+  if (typesInUse.length === 0) { bar.innerHTML = ''; return; }
+  var orderedTypes = WORD_TYPES.filter(function(t) { return typesInUse.indexOf(t) >= 0; });
+  bar.innerHTML = '<button class="chip ' + (!activeWLWordType ? 'active' : '') + '" onclick="filterWLWordType(null)">All</button>' +
+    orderedTypes.map(function(t) { return '<button class="chip ' + (activeWLWordType === t ? 'active' : '') + '" onclick="filterWLWordType(\'' + t + '\')">' + t + '</button>'; }).join('');
+}
+
+function filterWLWordType(type) {
+  activeWLWordType = type;
+  renderWordlist();
+}
+
+function renderWlistFilterBar() {
+  var cats = [];
+  wordlist.forEach(function(w) { if (w.category && cats.indexOf(w.category) === -1) cats.push(w.category); });
+  cats.sort();
+  var bar = document.getElementById('wlistFilterBar');
+  if (cats.length === 0) { bar.innerHTML = ''; return; }
+  bar.innerHTML = '<button class="chip ' + (!activeWLCategory ? 'active' : '') + '" onclick="filterWLCategory(null)">All</button>' +
+    cats.map(function(c) { return '<button class="chip ' + (activeWLCategory === c ? 'active' : '') + '" onclick="filterWLCategory(\'' + esc(c) + '\')">' + esc(c) + '</button>'; }).join('');
+}
+
+function filterWLCategory(cat) {
+  activeWLCategory = cat;
+  renderWordlist();
+}
+
+function editWlistWord(id) {
+  var w = wordlist.find(function(x) { return x.id === id; });
+  if (!w) return;
+  var info = w.german + '\n\nEN: ' + w.english;
+  if (w.chinese) info += '\n中: ' + w.chinese;
+  if (w.wordType) info += '\nType: ' + w.wordType;
+  if (w.grammar) info += '\nGrammar: ' + w.grammar;
+  if (w.category) info += '\nCategory: ' + w.category;
+  info += '\n\nTap OK to move this word to Words (active study).';
+  if (confirm(info)) {
+    words.push({
+      id: 'w' + Date.now() + Math.random().toString(36).slice(2, 6),
+      german: w.german, english: w.english, chinese: w.chinese,
+      wordType: w.wordType || '', gender: w.gender || '',
+      plural: w.plural || '', grammar: w.grammar || '',
+      examples: w.examples || [], example: (w.examples && w.examples[0]) || '',
+      category: w.category || '',
+      createdAt: Date.now(), updatedAt: Date.now()
+    });
+    wordlist = wordlist.filter(function(x) { return x.id !== id; });
+    saveWords();
+    saveWordlist();
+    showToast('Moved to Words!');
+    renderWordlist();
+  }
+}
+
+function removeWlistWord(id) {
+  if (!confirm('Remove this word from your list?')) return;
+  wordlist = wordlist.filter(function(x) { return x.id !== id; });
+  saveWordlist();
+  showToast('Removed');
+  renderWordlist();
+}
+
+function addToWordlist(entry) {
+  if (wordlist.some(function(w) { return w.german.toLowerCase() === entry.de.toLowerCase(); })) {
+    showToast('Already in your Words List!');
+    return;
+  }
+  wordlist.push({
+    id: 'wl' + Date.now() + Math.random().toString(36).slice(2, 6),
+    german: entry.de,
+    english: entry.en,
+    chinese: entry.zh,
+    wordType: entry.type,
+    gender: entry.type === 'Nomen' ? autoDetectGender(entry.de) : '',
+    plural: '',
+    grammar: '',
+    examples: [],
+    example: '',
+    category: entry.level,
+    createdAt: Date.now(),
+    updatedAt: Date.now()
+  });
+  saveWordlist();
+  showToast('Added to List: ' + entry.de);
+  renderDict();
 }
 
 // ── DeepL API Key ──
@@ -6118,6 +6348,7 @@ function renderDict() {
 
   const display = showDismissed ? [...active, ...hidden] : active;
   const userGerman = new Set(words.map(w => w.german.toLowerCase()));
+  const wlistGerman = new Set(wordlist.map(w => w.german.toLowerCase()));
 
   const container = document.getElementById('dictList');
   document.getElementById('dictCount').textContent = active.length + ' words';
@@ -6132,8 +6363,12 @@ function renderDict() {
   }
 
   container.innerHTML = display.map(d => {
-    const isAdded = userGerman.has(d.de.toLowerCase());
+    const inWords = userGerman.has(d.de.toLowerCase());
+    const inWlist = wlistGerman.has(d.de.toLowerCase());
+    const isAdded = inWords || inWlist;
     const isDismissed = dismissedDict.has(d.de);
+    const addedLabel = inWords ? '&#10003;' : (inWlist ? '&#9734;' : '&#10133;');
+    const addedTitle = inWords ? 'In Words' : (inWlist ? 'In List' : 'Add');
     return `
     <div class="dict-entry${isDismissed ? ' dismissed' : ''}">
       <div class="dict-info">
@@ -6146,7 +6381,7 @@ function renderDict() {
       </div>
       ${isDismissed
         ? `<button class="dict-restore-btn" onclick="restoreDictWord('${esc(d.de).replace(/'/g, "\\'")}')" title="Restore word">&#8635;</button>`
-        : `<button class="dict-add-btn ${isAdded ? 'added' : ''}" onclick="addFromDict('${esc(d.de).replace(/'/g, "\\'")}')" title="${isAdded ? 'Already added' : 'Add to my words'}">${isAdded ? '&#10003;' : '&#10133;'}</button>
+        : `<button class="dict-add-btn ${isAdded ? 'added' : ''}" onclick="addFromDict('${esc(d.de).replace(/'/g, "\\'")}')" title="${addedTitle}">${addedLabel}</button>
       <button class="dict-dismiss-btn" onclick="dismissDictWord('${esc(d.de).replace(/'/g, "\\'")}')" title="Hide word (already know it)">&#10060;</button>`}
     </div>`;
   }).join('') + `<div class="dict-count">Showing ${active.length} of ${DICTIONARY.length - dismissedDict.size} active words${dismissedDict.size > 0 ? ' · ' + dismissedDict.size + ' hidden' : ''}</div>`;
@@ -6161,37 +6396,41 @@ function filterDictLevel(level) {
 }
 
 function addFromDict(deWord) {
-  const entry = DICTIONARY.find(d => d.de === deWord);
+  var entry = DICTIONARY.find(function(d) { return d.de === deWord; });
   if (!entry) return;
 
-  // Check if already in user's list
-  if (words.some(w => w.german.toLowerCase() === entry.de.toLowerCase())) {
-    showToast('Already in your word list!');
+  var inWords = words.some(function(w) { return w.german.toLowerCase() === entry.de.toLowerCase(); });
+  var inWlist = wordlist.some(function(w) { return w.german.toLowerCase() === entry.de.toLowerCase(); });
+
+  if (inWords && inWlist) {
+    showToast('Already in both lists!');
     return;
   }
 
-  words.push({
-    id: 'w' + Date.now() + Math.random().toString(36).slice(2, 6),
-    german: entry.de,
-    english: entry.en,
-    chinese: entry.zh,
-    wordType: entry.type,
-    gender: entry.type === 'Nomen' ? autoDetectGender(entry.de) : '',
-    plural: '',
-    grammar: '',
-    examples: [],
-    example: '',
-    category: entry.level,
-    createdAt: Date.now(),
-    updatedAt: Date.now()
-  });
+  var choice = confirm(entry.de + '\n\nOK = Add to Words (active study)\nCancel = Add to List (saved for later)');
 
-  saveWords();
-  showToast('Added: ' + entry.de);
-  renderDict(); // re-render to update the check mark
+  if (choice) {
+    if (inWords) { showToast('Already in Words!'); return; }
+    words.push({
+      id: 'w' + Date.now() + Math.random().toString(36).slice(2, 6),
+      german: entry.de, english: entry.en, chinese: entry.zh,
+      wordType: entry.type,
+      gender: entry.type === 'Nomen' ? autoDetectGender(entry.de) : '',
+      plural: '', grammar: '', examples: [], example: '',
+      category: entry.level,
+      createdAt: Date.now(), updatedAt: Date.now()
+    });
+    saveWords();
+    showToast('Added to Words: ' + entry.de);
+  } else {
+    if (inWlist) { showToast('Already in List!'); return; }
+    addToWordlist(entry);
+  }
+  renderDict();
 }
 
 document.getElementById('dictSearchInput').addEventListener('input', renderDict);
+document.getElementById('wlistSearchInput').addEventListener('input', renderWordlist);
 
 // Wire up sync link (using addEventListener for mobile Safari compatibility)
 document.getElementById('syncLink').addEventListener('click', function(e) {
