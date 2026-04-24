@@ -723,6 +723,8 @@
   .dict-level-A2 { background: rgba(52,152,219,0.2); color: #3498db; }
   .dict-level-B1 { background: rgba(243,156,18,0.2); color: #f39c12; }
   .dict-level-B2 { background: rgba(231,76,60,0.2); color: #e74c3c; }
+  .dict-level-C1 { background: rgba(155,89,182,0.2); color: #9b59b6; }
+  .dict-level-C2 { background: rgba(44,62,80,0.2); color: #7f8c8d; }
 
   .dict-add-btn {
     flex-shrink: 0;
@@ -1051,6 +1053,14 @@
     </div>
 
     <div class="data-section">
+      <h3>DeepL Lookup</h3>
+      <p style="font-size:12px;color:var(--text-dim);margin-bottom:8px;">Free API key from <a href="https://www.deepl.com/pro#developer" target="_blank" style="color:var(--accent);">deepl.com/pro#developer</a></p>
+      <input type="text" id="deeplKeyInput" placeholder="Paste DeepL API key here" style="width:100%;padding:10px;border:1px solid rgba(255,255,255,0.08);border-radius:10px;background:var(--surface);color:var(--text);font-size:13px;font-family:monospace;margin-bottom:8px;box-sizing:border-box;">
+      <button class="btn-small" onclick="saveDeeplKey()">Save Key</button>
+      <span id="deeplStatus" style="font-size:12px;color:var(--text-dim);margin-left:8px;"></span>
+    </div>
+
+    <div class="data-section">
       <h3>Your Data</h3>
       <button class="btn-small" onclick="exportData()">Export JSON</button>
       <button class="btn-small" onclick="exportCSV()">Export CSV</button>
@@ -1076,6 +1086,8 @@
     <button class="level-chip" data-level="A2" onclick="filterDictLevel('A2')">A2</button>
     <button class="level-chip" data-level="B1" onclick="filterDictLevel('B1')">B1</button>
     <button class="level-chip" data-level="B2" onclick="filterDictLevel('B2')">B2</button>
+    <button class="level-chip" data-level="C1" onclick="filterDictLevel('C1')">C1</button>
+    <button class="level-chip" data-level="C2" onclick="filterDictLevel('C2')">C2</button>
   </div>
   <div class="dict-hidden-bar" id="dictHiddenBar" style="display:none;">
     <button class="dict-hidden-toggle" id="dictHiddenToggle" onclick="toggleShowDismissed()">Show hidden words</button>
@@ -1553,63 +1565,100 @@ function filterCategory(cat) {
   renderList();
 }
 
-// ── Dictionary Lookup ──
+// ── DeepL API Key ──
+function getDeeplKey() {
+  return localStorage.getItem('wenjin_deepl_key') || '';
+}
+function saveDeeplKey() {
+  var key = document.getElementById('deeplKeyInput').value.trim();
+  if (!key) { showToast('Please enter a key'); return; }
+  localStorage.setItem('wenjin_deepl_key', key);
+  document.getElementById('deeplStatus').textContent = 'Saved!';
+  document.getElementById('deeplStatus').style.color = 'var(--green)';
+  showToast('DeepL API key saved');
+}
+function loadDeeplKeyUI() {
+  var key = getDeeplKey();
+  if (key) {
+    document.getElementById('deeplKeyInput').value = key;
+    document.getElementById('deeplStatus').textContent = 'Key saved';
+    document.getElementById('deeplStatus').style.color = 'var(--green)';
+  }
+}
+
+// ── Dictionary Lookup (DeepL with MyMemory fallback) ──
 async function lookupWord() {
-  const german = document.getElementById('fGerman').value.trim();
+  var german = document.getElementById('fGerman').value.trim();
   if (!german) {
     showToast('Type a German word first');
     return;
   }
 
-  const btn = document.getElementById('lookupBtn');
+  var btn = document.getElementById('lookupBtn');
   btn.classList.add('loading');
   btn.disabled = true;
 
+  var deeplKey = getDeeplKey();
+
   try {
-    // Fetch English and Chinese translations in parallel
-    const [enRes, zhRes] = await Promise.all([
-      fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(german)}&langpair=de|en`)
-        .then(r => r.json()).catch(() => null),
-      fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(german)}&langpair=de|zh-CN`)
-        .then(r => r.json()).catch(() => null)
-    ]);
+    var enFilled = false, zhFilled = false;
 
-    let enFilled = false, zhFilled = false;
+    if (deeplKey) {
+      // Use DeepL API (free tier)
+      var apiBase = deeplKey.endsWith(':fx')
+        ? 'https://api-free.deepl.com/v2/translate'
+        : 'https://api.deepl.com/v2/translate';
 
-    // Fill English
-    if (enRes && enRes.responseStatus === 200 && enRes.responseData) {
-      const mainTranslation = enRes.responseData.translatedText;
-      // Also collect alternative translations from matches
-      const alternatives = (enRes.matches || [])
-        .filter(m => m.segment.toLowerCase() === german.toLowerCase() && m.translation !== mainTranslation)
-        .map(m => m.translation)
-        .filter((v, i, a) => a.indexOf(v) === i) // unique
-        .slice(0, 3);
+      var [enRes, zhRes] = await Promise.all([
+        fetch(apiBase, {
+          method: 'POST',
+          headers: { 'Authorization': 'DeepL-Auth-Key ' + deeplKey, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: [german], source_lang: 'DE', target_lang: 'EN' })
+        }).then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; }),
+        fetch(apiBase, {
+          method: 'POST',
+          headers: { 'Authorization': 'DeepL-Auth-Key ' + deeplKey, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: [german], source_lang: 'DE', target_lang: 'ZH' })
+        }).then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; })
+      ]);
 
-      let enText = mainTranslation;
-      if (alternatives.length > 0) {
-        enText += '; ' + alternatives.join('; ');
-      }
-
-      const enInput = document.getElementById('fEnglish');
-      if (!enInput.value.trim()) {
-        enInput.value = enText;
-        flashField(enInput);
-        enFilled = true;
-      } else {
-        // If field already has content, only fill if user wants
-        enInput.value = enText;
+      if (enRes && enRes.translations && enRes.translations[0]) {
+        var enInput = document.getElementById('fEnglish');
+        enInput.value = enRes.translations[0].text;
         flashField(enInput);
         enFilled = true;
       }
-    }
+      if (zhRes && zhRes.translations && zhRes.translations[0]) {
+        var zhInput = document.getElementById('fChinese');
+        zhInput.value = zhRes.translations[0].text;
+        flashField(zhInput);
+        zhFilled = true;
+      }
 
-    // Fill Chinese
-    if (zhRes && zhRes.responseStatus === 200 && zhRes.responseData) {
-      const zhInput = document.getElementById('fChinese');
-      zhInput.value = zhRes.responseData.translatedText;
-      flashField(zhInput);
-      zhFilled = true;
+      if (!enFilled && !zhFilled) {
+        showToast('DeepL returned no results — check your API key');
+      }
+    } else {
+      // Fallback: MyMemory (no key needed)
+      var [enRes2, zhRes2] = await Promise.all([
+        fetch('https://api.mymemory.translated.net/get?q=' + encodeURIComponent(german) + '&langpair=de|en')
+          .then(function(r) { return r.json(); }).catch(function() { return null; }),
+        fetch('https://api.mymemory.translated.net/get?q=' + encodeURIComponent(german) + '&langpair=de|zh-CN')
+          .then(function(r) { return r.json(); }).catch(function() { return null; })
+      ]);
+
+      if (enRes2 && enRes2.responseStatus === 200 && enRes2.responseData) {
+        var enInput2 = document.getElementById('fEnglish');
+        enInput2.value = enRes2.responseData.translatedText;
+        flashField(enInput2);
+        enFilled = true;
+      }
+      if (zhRes2 && zhRes2.responseStatus === 200 && zhRes2.responseData) {
+        var zhInput2 = document.getElementById('fChinese');
+        zhInput2.value = zhRes2.responseData.translatedText;
+        flashField(zhInput2);
+        zhFilled = true;
+      }
     }
 
     if (enFilled || zhFilled) {
@@ -1850,6 +1899,7 @@ function updateStats() {
   document.getElementById('statToday').textContent = words.filter(w => w.createdAt >= todayStart).length;
   document.getElementById('statWeek').textContent = words.filter(w => w.createdAt >= weekStart).length;
   document.getElementById('statCategories').textContent = new Set(words.map(w => w.category).filter(Boolean)).size;
+  loadDeeplKeyUI();
 }
 
 // ── Export / Import ──
@@ -5580,6 +5630,455 @@ const DICTIONARY = [
   { de: "gewissermaßen", en: "in a sense", zh: "在某种程度上", type: "Adverb", level: "B2" },
   { de: "beispielsweise", en: "for example", zh: "例如", type: "Adverb", level: "B2" },
   { de: "nämlich", en: "namely", zh: "即", type: "Adverb", level: "B2" },
+// ── C1-C2 Advanced Vocabulary ──
+  { de: "beauftragen", en: "to commission", zh: "委托", type: "Verb", level: "C1" },
+  { de: "delegieren", en: "to delegate", zh: "委派", type: "Verb", level: "C1" },
+  { de: "erörtern", en: "to discuss", zh: "讨论", type: "Verb", level: "C1" },
+  { de: "bewerkstelligen", en: "to accomplish", zh: "完成", type: "Verb", level: "C1" },
+  { de: "implementieren", en: "to implement", zh: "实施", type: "Verb", level: "C1" },
+  { de: "ausarbeiten", en: "to elaborate", zh: "详细说明", type: "Verb", level: "C1" },
+  { de: "umstrukturieren", en: "to restructure", zh: "重组", type: "Verb", level: "C1" },
+  { de: "forcieren", en: "to accelerate", zh: "促进", type: "Verb", level: "C1" },
+  { de: "rationalisieren", en: "to rationalize", zh: "简化", type: "Verb", level: "C1" },
+  { de: "mobilisieren", en: "to mobilize", zh: "动员", type: "Verb", level: "C1" },
+  { de: "etablieren", en: "to establish", zh: "确立", type: "Verb", level: "C1" },
+  { de: "rekrutieren", en: "to recruit", zh: "招聘", type: "Verb", level: "C1" },
+  { de: "akkreditieren", en: "to accredit", zh: "认证", type: "Verb", level: "C1" },
+  { de: "zertifizieren", en: "to certify", zh: "证明", type: "Verb", level: "C1" },
+  { de: "aushandeln", en: "to negotiate", zh: "谈判", type: "Verb", level: "C1" },
+  { de: "erläutern", en: "to explain", zh: "阐述", type: "Verb", level: "C1" },
+  { de: "widerlegen", en: "to refute", zh: "驳斥", type: "Verb", level: "C1" },
+  { de: "andeuten", en: "to hint", zh: "暗示", type: "Verb", level: "C1" },
+  { de: "untermauern", en: "to substantiate", zh: "证实", type: "Verb", level: "C1" },
+  { de: "präzisieren", en: "to clarify", zh: "明确", type: "Verb", level: "C1" },
+  { de: "artikulieren", en: "to articulate", zh: "表达", type: "Verb", level: "C1" },
+  { de: "illustrieren", en: "to illustrate", zh: "举例", type: "Verb", level: "C1" },
+  { de: "veranschaulichen", en: "to demonstrate", zh: "说明", type: "Verb", level: "C1" },
+  { de: "relativieren", en: "to relativize", zh: "相对化", type: "Verb", level: "C1" },
+  { de: "beziffern", en: "to quantify", zh: "定量", type: "Verb", level: "C1" },
+  { de: "abwägen", en: "to weigh", zh: "权衡", type: "Verb", level: "C1" },
+  { de: "hinterfragen", en: "to question", zh: "质疑", type: "Verb", level: "C1" },
+  { de: "reflektieren", en: "to reflect", zh: "反思", type: "Verb", level: "C1" },
+  { de: "subsumieren", en: "to subsume", zh: "归纳", type: "Verb", level: "C1" },
+  { de: "extrapolieren", en: "to extrapolate", zh: "推断", type: "Verb", level: "C1" },
+  { de: "operationalisieren", en: "to operationalize", zh: "操作化", type: "Verb", level: "C1" },
+  { de: "sich einleben", en: "to settle in", zh: "适应", type: "Verb", level: "C1" },
+  { de: "ausharren", en: "to persevere", zh: "坚持", type: "Verb", level: "C1" },
+  { de: "auseinandergehen", en: "to part ways", zh: "分道扬镳", type: "Verb", level: "C1" },
+  { de: "anbandeln", en: "to flirt", zh: "调情", type: "Verb", level: "C1" },
+  { de: "sich auseinandersetzen", en: "to deal with", zh: "对待", type: "Verb", level: "C1" },
+  { de: "sich zurechtfinden", en: "to find one's way", zh: "适应", type: "Verb", level: "C1" },
+  { de: "sich herauskristallisieren", en: "to emerge", zh: "显现", type: "Verb", level: "C1" },
+  { de: "sich herausstellen", en: "to turn out", zh: "证明是", type: "Verb", level: "C1" },
+  { de: "sich entwickeln", en: "to develop", zh: "发展", type: "Verb", level: "C1" },
+  { de: "sich vollziehen", en: "to take place", zh: "发生", type: "Verb", level: "C1" },
+  { de: "sich abzeichnen", en: "to loom", zh: "显露", type: "Verb", level: "C1" },
+  { de: "mutieren", en: "to mutate", zh: "变化", type: "Verb", level: "C1" },
+  { de: "transformieren", en: "to transform", zh: "转变", type: "Verb", level: "C1" },
+  { de: "metamorphosieren", en: "to metamorphose", zh: "蜕变", type: "Verb", level: "C1" },
+  { de: "kontrahieren", en: "to contract", zh: "收缩", type: "Verb", level: "C1" },
+  { de: "eskalieren", en: "to escalate", zh: "升级", type: "Verb", level: "C1" },
+  { de: "deeskalieren", en: "to de-escalate", zh: "缓和", type: "Verb", level: "C1" },
+  { de: "abklingen", en: "to die down", zh: "减弱", type: "Verb", level: "C1" },
+  { de: "anklingen", en: "to resound", zh: "回响", type: "Verb", level: "C1" },
+  { de: "verfestigen", en: "to consolidate", zh: "巩固", type: "Verb", level: "C1" },
+  { de: "zerfallen", en: "to disintegrate", zh: "瓦解", type: "Verb", level: "C1" },
+  { de: "konfrontieren", en: "to confront", zh: "对抗", type: "Verb", level: "C1" },
+  { de: "konterkarieren", en: "to counteract", zh: "抵消", type: "Verb", level: "C1" },
+  { de: "sabotieren", en: "to sabotage", zh: "破坏", type: "Verb", level: "C1" },
+  { de: "untergraben", en: "to undermine", zh: "破坏", type: "Verb", level: "C1" },
+  { de: "sistieren", en: "to suspend", zh: "暂停", type: "Verb", level: "C1" },
+  { de: "prolongieren", en: "to prolong", zh: "延长", type: "Verb", level: "C1" },
+  { de: "verkürzen", en: "to shorten", zh: "缩短", type: "Verb", level: "C1" },
+  { de: "beschleunigen", en: "to accelerate", zh: "加速", type: "Verb", level: "C1" },
+  { de: "verlangsamen", en: "to slow down", zh: "减速", type: "Verb", level: "C1" },
+  { de: "akkumulieren", en: "to accumulate", zh: "积累", type: "Verb", level: "C1" },
+  { de: "dissimulieren", en: "to dissemble", zh: "隐瞒", type: "Verb", level: "C1" },
+  { de: "simulieren", en: "to simulate", zh: "模拟", type: "Verb", level: "C1" },
+  { de: "antizipieren", en: "to anticipate", zh: "预期", type: "Verb", level: "C1" },
+  { de: "oszillieren", en: "to oscillate", zh: "振动", type: "Verb", level: "C1" },
+  { de: "pendeln", en: "to commute", zh: "摇摆", type: "Verb", level: "C1" },
+  { de: "fluktuieren", en: "to fluctuate", zh: "波动", type: "Verb", level: "C1" },
+  { de: "variieren", en: "to vary", zh: "变化", type: "Verb", level: "C1" },
+  { de: "modulieren", en: "to modulate", zh: "调节", type: "Verb", level: "C1" },
+  { de: "gradieren", en: "to graduate", zh: "分级", type: "Verb", level: "C1" },
+  { de: "diversifizieren", en: "to diversify", zh: "多样化", type: "Verb", level: "C1" },
+  { de: "universalisieren", en: "to universalize", zh: "普遍化", type: "Verb", level: "C1" },
+  { de: "partikularisieren", en: "to particularize", zh: "具体化", type: "Verb", level: "C1" },
+  { de: "generalisieren", en: "to generalize", zh: "概括", type: "Verb", level: "C1" },
+  { de: "kontextualisieren", en: "to contextualize", zh: "语境化", type: "Verb", level: "C1" },
+  { de: "reinterpretieren", en: "to reinterpret", zh: "重新解读", type: "Verb", level: "C1" },
+  { de: "revidieren", en: "to revise", zh: "修订", type: "Verb", level: "C1" },
+  { de: "reformieren", en: "to reform", zh: "改革", type: "Verb", level: "C1" },
+  { de: "destabilisieren", en: "to destabilize", zh: "破坏稳定", type: "Verb", level: "C1" },
+  { de: "stabilisieren", en: "to stabilize", zh: "稳定", type: "Verb", level: "C1" },
+  { de: "polarisieren", en: "to polarize", zh: "两极分化", type: "Verb", level: "C1" },
+  { de: "homogenisieren", en: "to homogenize", zh: "均质化", type: "Verb", level: "C1" },
+  { de: "differentialisieren", en: "to differentiate", zh: "分化", type: "Verb", level: "C1" },
+  { de: "desintegrieren", en: "to disintegrate", zh: "瓦解", type: "Verb", level: "C1" },
+  { de: "segmentieren", en: "to segment", zh: "分割", type: "Verb", level: "C1" },
+  { de: "fraktionieren", en: "to fractionate", zh: "分组", type: "Verb", level: "C1" },
+  { de: "fragmentieren", en: "to fragment", zh: "碎片化", type: "Verb", level: "C1" },
+  { de: "ghettofreisein", en: "to democratize", zh: "民主化", type: "Verb", level: "C1" },
+  { de: "zentralisieren", en: "to centralize", zh: "集中", type: "Verb", level: "C1" },
+  { de: "dezentralisieren", en: "to decentralize", zh: "分散", type: "Verb", level: "C1" },
+  { de: "egalisieren", en: "to equalize", zh: "均等", type: "Verb", level: "C1" },
+  { de: "stratifizieren", en: "to stratify", zh: "分层化", type: "Verb", level: "C1" },
+  { de: "aequilibrieren", en: "to equilibrate", zh: "平衡", type: "Verb", level: "C1" },
+  { de: "kontrastieren", en: "to contrast", zh: "对比", type: "Verb", level: "C1" },
+  { de: "assimilieren", en: "to assimilate", zh: "同化", type: "Verb", level: "C1" },
+  { de: "akkulturieren", en: "to acculturate", zh: "文化融入", type: "Verb", level: "C1" },
+  { de: "institutionalisieren", en: "to institutionalize", zh: "制度化", type: "Verb", level: "C1" },
+  { de: "personalisieren", en: "to personalize", zh: "个性化", type: "Verb", level: "C1" },
+  { de: "objektivieren", en: "to objectify", zh: "客观化", type: "Verb", level: "C1" },
+  { de: "subjektivieren", en: "to subjectify", zh: "主观化", type: "Verb", level: "C1" },
+  { de: "der Geschäftsführer", en: "managing director; CEO", zh: "总经理", type: "Nomen", level: "C1" },
+  { de: "die Rentabilität", en: "profitability; return on investment", zh: "盈利能力", type: "Nomen", level: "C1" },
+  { de: "der Personalabbau", en: "staff reduction; downsizing", zh: "裁员", type: "Nomen", level: "C1" },
+  { de: "die Zivilgesellschaft", en: "civil society", zh: "民间社会", type: "Nomen", level: "C1" },
+  { de: "der Rechtsstaat", en: "state ruled by law", zh: "法治国家", type: "Nomen", level: "C1" },
+  { de: "die Gleichberechtigung", en: "equality; equal rights", zh: "平等权利", type: "Nomen", level: "C1" },
+  { de: "die Vorsorge", en: "precaution; provision; preventive care", zh: "预防", type: "Nomen", level: "C1" },
+  { de: "das Burnout", en: "burnout; exhaustion", zh: "职业倦怠", type: "Nomen", level: "C1" },
+  { de: "die Nebenwirkung", en: "side effect", zh: "副作用", type: "Nomen", level: "C1" },
+  { de: "die Nebenkosten", en: "ancillary costs; operating costs", zh: "附加费用", type: "Nomen", level: "C1" },
+  { de: "der Mietvertrag", en: "rental agreement; lease", zh: "租赁合同", type: "Nomen", level: "C1" },
+  { de: "die Kaution", en: "security deposit; bail", zh: "押金", type: "Nomen", level: "C1" },
+  { de: "die Datenschutzverordnung", en: "data protection regulation", zh: "数据保护条例", type: "Nomen", level: "C1" },
+  { de: "der Algorithmus", en: "algorithm", zh: "算法", type: "Nomen", level: "C1" },
+  { de: "die Künstliche Intelligenz", en: "artificial intelligence", zh: "人工智能", type: "Nomen", level: "C1" },
+  { de: "die Rendite", en: "yield; return on investment", zh: "收益率", type: "Nomen", level: "C1" },
+  { de: "der Zinssatz", en: "interest rate", zh: "利率", type: "Nomen", level: "C1" },
+  { de: "der Klimawandel", en: "climate change", zh: "气候变化", type: "Nomen", level: "C1" },
+  { de: "die Nachhaltigkeit", en: "sustainability", zh: "可持续性", type: "Nomen", level: "C1" },
+  { de: "der CO2-Ausstoß", en: "CO2 emissions", zh: "二氧化碳排放", type: "Nomen", level: "C1" },
+  { de: "die Belegschaft", en: "workforce; staff", zh: "员工", type: "Nomen", level: "C1" },
+  { de: "der Tarifvertrag", en: "collective bargaining agreement", zh: "劳动合同", type: "Nomen", level: "C1" },
+  { de: "die Lohnabrechnung", en: "payroll; wage settlement", zh: "工资单", type: "Nomen", level: "C1" },
+  { de: "die Schuldverschreibung", en: "bond; debt security", zh: "债券", type: "Nomen", level: "C1" },
+  { de: "der Bankrott", en: "bankruptcy", zh: "破产", type: "Nomen", level: "C1" },
+  { de: "die Insolvenz", en: "insolvency", zh: "无力偿债", type: "Nomen", level: "C1" },
+  { de: "die Abgaben", en: "taxes; duties", zh: "税款", type: "Nomen", level: "C1" },
+  { de: "die Steuerrückerstattung", en: "tax refund", zh: "退税", type: "Nomen", level: "C1" },
+  { de: "die Konjunktur", en: "economic cycle; business cycle", zh: "经济形势", type: "Nomen", level: "C1" },
+  { de: "die Rezession", en: "recession", zh: "衰退", type: "Nomen", level: "C1" },
+  { de: "die Inflation", en: "inflation", zh: "通货膨胀", type: "Nomen", level: "C1" },
+  { de: "das Defizit", en: "deficit", zh: "赤字", type: "Nomen", level: "C1" },
+  { de: "der Wohlstand", en: "prosperity; affluence", zh: "繁荣", type: "Nomen", level: "C1" },
+  { de: "die Armut", en: "poverty", zh: "贫困", type: "Nomen", level: "C1" },
+  { de: "die Ungleichheit", en: "inequality", zh: "不平等", type: "Nomen", level: "C1" },
+  { de: "die Gerechtigkeit", en: "justice; fairness", zh: "正义", type: "Nomen", level: "C1" },
+  { de: "das Wohlfahrtssystem", en: "welfare system", zh: "福利制度", type: "Nomen", level: "C1" },
+  { de: "die Gesetzgebung", en: "legislation; lawmaking", zh: "立法", type: "Nomen", level: "C1" },
+  { de: "die Verordnung", en: "regulation; decree", zh: "条例", type: "Nomen", level: "C1" },
+  { de: "die Gerichtsbarkeit", en: "judiciary; jurisdiction", zh: "司法权", type: "Nomen", level: "C1" },
+  { de: "der Verfassungsschutz", en: "constitutional protection", zh: "宪法保护", type: "Nomen", level: "C1" },
+  { de: "die Menschenrechte", en: "human rights", zh: "人权", type: "Nomen", level: "C1" },
+  { de: "die Demonstration", en: "demonstration; protest", zh: "示威", type: "Nomen", level: "C1" },
+  { de: "die Petition", en: "petition", zh: "请愿书", type: "Nomen", level: "C1" },
+  { de: "der Wahlkampf", en: "election campaign", zh: "竞选活动", type: "Nomen", level: "C1" },
+  { de: "die Partei", en: "party; political party", zh: "政党", type: "Nomen", level: "C1" },
+  { de: "die Koalition", en: "coalition", zh: "联盟", type: "Nomen", level: "C1" },
+  { de: "das Parlament", en: "parliament", zh: "议会", type: "Nomen", level: "C1" },
+  { de: "die Gesundheitsversorgung", en: "healthcare system", zh: "医疗保健", type: "Nomen", level: "C1" },
+  { de: "die Diagnostik", en: "diagnostics; diagnosis", zh: "诊断", type: "Nomen", level: "C1" },
+  { de: "der Genesungsprozess", en: "recovery process", zh: "康复过程", type: "Nomen", level: "C1" },
+  { de: "die Prävention", en: "prevention", zh: "预防", type: "Nomen", level: "C1" },
+  { de: "der Impfstoff", en: "vaccine", zh: "疫苗", type: "Nomen", level: "C1" },
+  { de: "die Epidemiologie", en: "epidemiology", zh: "流行病学", type: "Nomen", level: "C1" },
+  { de: "die Psychiatrie", en: "psychiatry", zh: "精神病学", type: "Nomen", level: "C1" },
+  { de: "die Depression", en: "depression", zh: "抑郁症", type: "Nomen", level: "C1" },
+  { de: "die Angststörung", en: "anxiety disorder", zh: "焦虑症", type: "Nomen", level: "C1" },
+  { de: "die Schlaflosigkeit", en: "insomnia; sleeplessness", zh: "失眠", type: "Nomen", level: "C1" },
+  { de: "die Allergie", en: "allergy", zh: "过敏症", type: "Nomen", level: "C1" },
+  { de: "die Immunität", en: "immunity", zh: "免疫力", type: "Nomen", level: "C1" },
+  { de: "die Behinderung", en: "disability; impairment", zh: "残疾", type: "Nomen", level: "C1" },
+  { de: "die Altenpflege", en: "elderly care", zh: "养老护理", type: "Nomen", level: "C1" },
+  { de: "die Sanierung", en: "renovation; remediation", zh: "翻新", type: "Nomen", level: "C1" },
+  { de: "die Isolierung", en: "insulation; isolation", zh: "隔离", type: "Nomen", level: "C1" },
+  { de: "die Kühlung", en: "cooling", zh: "冷却", type: "Nomen", level: "C1" },
+  { de: "die Lüftung", en: "ventilation", zh: "通风", type: "Nomen", level: "C1" },
+  { de: "die Abwasseranlage", en: "sewage system", zh: "污水处理", type: "Nomen", level: "C1" },
+  { de: "die Wasserleitung", en: "water pipeline; water main", zh: "水管", type: "Nomen", level: "C1" },
+  { de: "die Stromversorgung", en: "power supply; electricity supply", zh: "供电", type: "Nomen", level: "C1" },
+  { de: "die Gasversorgung", en: "gas supply", zh: "供气", type: "Nomen", level: "C1" },
+  { de: "der Mietpreis", en: "rental price; rent", zh: "租金", type: "Nomen", level: "C1" },
+  { de: "der Makler", en: "real estate agent; broker", zh: "经纪人", type: "Nomen", level: "C1" },
+  { de: "das Eigentumsrecht", en: "property right; ownership", zh: "产权", type: "Nomen", level: "C1" },
+  { de: "die Informationstechnologie", en: "information technology", zh: "信息技术", type: "Nomen", level: "C1" },
+  { de: "die Software", en: "software", zh: "软件", type: "Nomen", level: "C1" },
+  { de: "die Hardware", en: "hardware", zh: "硬件", type: "Nomen", level: "C1" },
+  { de: "die Cybersicherheit", en: "cybersecurity", zh: "网络安全", type: "Nomen", level: "C1" },
+  { de: "der Hacker", en: "hacker", zh: "黑客", type: "Nomen", level: "C1" },
+  { de: "das Phishing", en: "phishing", zh: "网络钓鱼", type: "Nomen", level: "C1" },
+  { de: "die Blockchain", en: "blockchain", zh: "区块链", type: "Nomen", level: "C1" },
+  { de: "die Kryptowährung", en: "cryptocurrency", zh: "加密货币", type: "Nomen", level: "C1" },
+  { de: "das Streaming", en: "streaming", zh: "流媒体", type: "Nomen", level: "C1" },
+  { de: "der Podcast", en: "podcast", zh: "播客", type: "Nomen", level: "C1" },
+  { de: "der Influencer", en: "influencer", zh: "网红", type: "Nomen", level: "C1" },
+  { de: "die Misinformation", en: "misinformation; false information", zh: "虚假信息", type: "Nomen", level: "C1" },
+  { de: "die Desinformation", en: "disinformation", zh: "虚假宣传", type: "Nomen", level: "C1" },
+  { de: "die Dokumentation", en: "documentation", zh: "文件", type: "Nomen", level: "C1" },
+  { de: "die Schulung", en: "training; instruction", zh: "培训", type: "Nomen", level: "C1" },
+  { de: "der Lehrplan", en: "curriculum", zh: "课程计划", type: "Nomen", level: "C1" },
+  { de: "die Lehrmethode", en: "teaching method", zh: "教学方法", type: "Nomen", level: "C1" },
+  { de: "die Dozentur", en: "lectureship; professorship", zh: "讲师职位", type: "Nomen", level: "C1" },
+  { de: "die Dissertation", en: "dissertation; thesis", zh: "论文", type: "Nomen", level: "C1" },
+  { de: "die Feldforschung", en: "field research", zh: "实地研究", type: "Nomen", level: "C1" },
+  { de: "die Methodik", en: "methodology", zh: "方法论", type: "Nomen", level: "C1" },
+  { de: "die Datenbank", en: "database", zh: "数据库", type: "Nomen", level: "C1" },
+  { de: "die Publikation", en: "publication", zh: "出版物", type: "Nomen", level: "C1" },
+  { de: "die Redaktion", en: "editorial department; editing", zh: "编辑", type: "Nomen", level: "C1" },
+  { de: "die Korrektur", en: "correction; proofreading", zh: "更正", type: "Nomen", level: "C1" },
+  { de: "die Überprüfung", en: "inspection; verification; review", zh: "检查", type: "Nomen", level: "C1" },
+  { de: "die Qualitätssicherung", en: "quality assurance", zh: "质量保证", type: "Nomen", level: "C1" },
+  { de: "die Zertifizierung", en: "certification", zh: "认证", type: "Nomen", level: "C1" },
+  { de: "die Akkreditierung", en: "accreditation", zh: "认证", type: "Nomen", level: "C1" },
+  { de: "die Lieferkette", en: "supply chain", zh: "供应链", type: "Nomen", level: "C1" },
+  { de: "die Logistik", en: "logistics", zh: "物流", type: "Nomen", level: "C1" },
+  { de: "der Vertrieb", en: "distribution; sales", zh: "销售", type: "Nomen", level: "C1" },
+  { de: "die Kundenbeziehung", en: "customer relationship", zh: "客户关系", type: "Nomen", level: "C1" },
+  { de: "die Kundenzufriedenheit", en: "customer satisfaction", zh: "客户满意度", type: "Nomen", level: "C1" },
+  { de: "die Marktsegmentierung", en: "market segmentation", zh: "市场细分", type: "Nomen", level: "C1" },
+  { de: "die Marktforschung", en: "market research", zh: "市场调查", type: "Nomen", level: "C1" },
+  { de: "die Wettbewerbsfähigkeit", en: "competitiveness", zh: "竞争力", type: "Nomen", level: "C1" },
+  { de: "das Monopol", en: "monopoly", zh: "垄断", type: "Nomen", level: "C1" },
+  { de: "das Oligopol", en: "oligopoly", zh: "寡头垄断", type: "Nomen", level: "C1" },
+  { de: "das Kartell", en: "cartel", zh: "卡特尔", type: "Nomen", level: "C1" },
+  { de: "die Fusion", en: "merger; fusion", zh: "合并", type: "Nomen", level: "C1" },
+  { de: "die Übernahme", en: "takeover; acquisition", zh: "收购", type: "Nomen", level: "C1" },
+  { de: "die Börse", en: "stock exchange", zh: "股票交易所", type: "Nomen", level: "C1" },
+  { de: "der Aktienkurs", en: "stock price", zh: "股价", type: "Nomen", level: "C1" },
+  { de: "die Dividende", en: "dividend", zh: "股息", type: "Nomen", level: "C1" },
+  { de: "das Portfolio", en: "portfolio", zh: "投资组合", type: "Nomen", level: "C1" },
+  { de: "der Broker", en: "broker", zh: "经纪人", type: "Nomen", level: "C1" },
+  { de: "die Schuldenlast", en: "debt burden", zh: "债务负担", type: "Nomen", level: "C1" },
+  { de: "die Steuerkonkurrenz", en: "tax competition", zh: "税收竞争", type: "Nomen", level: "C1" },
+  { de: "anspruchsvoll", en: "demanding", zh: "苛刻的", type: "Adjektiv", level: "C1" },
+  { de: "ausschlaggebend", en: "decisive", zh: "决定性的", type: "Adjektiv", level: "C1" },
+  { de: "beträchtlich", en: "considerable", zh: "相当的", type: "Adjektiv", level: "C1" },
+  { de: "geringfügig", en: "minor", zh: "轻微的", type: "Adjektiv", level: "C1" },
+  { de: "maßgeblich", en: "authoritative", zh: "权威的", type: "Adjektiv", level: "C1" },
+  { de: "unentbehrlich", en: "indispensable", zh: "不可或缺的", type: "Adjektiv", level: "C1" },
+  { de: "widerspruchsvoll", en: "contradictory", zh: "矛盾的", type: "Adjektiv", level: "C1" },
+  { de: "ungerechtfertigt", en: "unjustified", zh: "不合理的", type: "Adjektiv", level: "C1" },
+  { de: "unrechtmäßig", en: "unlawful", zh: "非法的", type: "Adjektiv", level: "C1" },
+  { de: "unumgänglich", en: "essential", zh: "必不可少的", type: "Adjektiv", level: "C1" },
+  { de: "zweischneidig", en: "double-edged", zh: "双刃的", type: "Adjektiv", level: "C1" },
+  { de: "zielstrebig", en: "determined", zh: "坚定的", type: "Adjektiv", level: "C1" },
+  { de: "durchschlagend", en: "striking", zh: "有效的", type: "Adjektiv", level: "C1" },
+  { de: "schwerwiegend", en: "serious", zh: "严重的", type: "Adjektiv", level: "C1" },
+  { de: "vordringlich", en: "urgent", zh: "紧迫的", type: "Adjektiv", level: "C1" },
+  { de: "naheliegend", en: "obvious", zh: "显而易见的", type: "Adjektiv", level: "C1" },
+  { de: "nachvollziehbar", en: "understandable", zh: "可以理解的", type: "Adjektiv", level: "C1" },
+  { de: "unverwechselbar", en: "unmistakable", zh: "独特的", type: "Adjektiv", level: "C1" },
+  { de: "durchdacht", en: "well-thought-out", zh: "深思熟虑的", type: "Adjektiv", level: "C1" },
+  { de: "uneingeschränkt", en: "unlimited", zh: "无限制的", type: "Adjektiv", level: "C1" },
+  { de: "unverhältnismäßig", en: "disproportionate", zh: "不成比例的", type: "Adjektiv", level: "C1" },
+  { de: "ungebrochen", en: "unbroken", zh: "未破损的", type: "Adjektiv", level: "C1" },
+  { de: "untragbar", en: "intolerable", zh: "难以容忍的", type: "Adjektiv", level: "C1" },
+  { de: "unannehmbar", en: "unacceptable", zh: "不可接受的", type: "Adjektiv", level: "C1" },
+  { de: "unfähig", en: "unable", zh: "无能的", type: "Adjektiv", level: "C1" },
+  { de: "unverzichtbar", en: "indispensable", zh: "必不可少的", type: "Adjektiv", level: "C1" },
+  { de: "unentschlossen", en: "indecisive", zh: "优柔寡断的", type: "Adjektiv", level: "C1" },
+  { de: "unerschütterlich", en: "unshakeable", zh: "坚定不移的", type: "Adjektiv", level: "C1" },
+  { de: "unersättlich", en: "insatiable", zh: "贪得无厌的", type: "Adjektiv", level: "C1" },
+  { de: "überwiegend", en: "predominantly", zh: "主要地", type: "Adjektiv", level: "C1" },
+  { de: "knifflig", en: "tricky", zh: "棘手的", type: "Adjektiv", level: "C1" },
+  { de: "skrupellos", en: "unscrupulous", zh: "不择手段的", type: "Adjektiv", level: "C1" },
+  { de: "scheinheilig", en: "hypocritical", zh: "虚伪的", type: "Adjektiv", level: "C1" },
+  { de: "ungerecht", en: "unjust", zh: "不公平的", type: "Adjektiv", level: "C1" },
+  { de: "empfindlich", en: "sensitive", zh: "敏感的", type: "Adjektiv", level: "C1" },
+  { de: "konsequent", en: "consistent", zh: "一致的", type: "Adjektiv", level: "C1" },
+  { de: "reduziert", en: "reduced", zh: "减少的", type: "Adjektiv", level: "C1" },
+  { de: "beschränkt", en: "limited", zh: "有限的", type: "Adjektiv", level: "C1" },
+  { de: "zänkisch", en: "quarrelsome", zh: "好争执的", type: "Adjektiv", level: "C1" },
+  { de: "treulos", en: "treacherous", zh: "背信的", type: "Adjektiv", level: "C1" },
+  { de: "pflichtbewusst", en: "conscientious", zh: "尽责的", type: "Adjektiv", level: "C1" },
+  { de: "verantwortungsvoll", en: "responsible", zh: "负责任的", type: "Adjektiv", level: "C1" },
+  { de: "eigenständig", en: "independent", zh: "独立的", type: "Adjektiv", level: "C1" },
+  { de: "berechtigt", en: "justified", zh: "正当的", type: "Adjektiv", level: "C1" },
+  { de: "widerstreitend", en: "contradictory", zh: "相矛盾的", type: "Adjektiv", level: "C1" },
+  { de: "kraftvoll", en: "powerful", zh: "有力的", type: "Adjektiv", level: "C1" },
+  { de: "umstritten", en: "controversial", zh: "有争议的", type: "Adjektiv", level: "C1" },
+  { de: "lückenlos", en: "complete", zh: "完整的", type: "Adjektiv", level: "C1" },
+  { de: "zweifelsfrei", en: "indubitable", zh: "无疑的", type: "Adjektiv", level: "C1" },
+  { de: "vorbeugend", en: "preventive", zh: "预防的", type: "Adjektiv", level: "C1" },
+  { de: "erschöpfend", en: "exhaustive", zh: "详尽的", type: "Adjektiv", level: "C1" },
+  { de: "diskret", en: "discreet", zh: "谨慎的", type: "Adjektiv", level: "C1" },
+  { de: "untadelig", en: "impeccable", zh: "无可非议的", type: "Adjektiv", level: "C1" },
+  { de: "demnach", en: "accordingly", zh: "因此", type: "Adverb", level: "C1" },
+  { de: "folglich", en: "consequently", zh: "因此", type: "Adverb", level: "C1" },
+  { de: "keineswegs", en: "by no means", zh: "绝不", type: "Adverb", level: "C1" },
+  { de: "vorwiegend", en: "mainly", zh: "主要地", type: "Adverb", level: "C1" },
+  { de: "alsdann", en: "then", zh: "那么", type: "Adverb", level: "C1" },
+  { de: "indessen", en: "meanwhile", zh: "与此同时", type: "Adverb", level: "C1" },
+  { de: "inwieweit", en: "to what extent", zh: "在何种程度上", type: "Adverb", level: "C1" },
+  { de: "insoweit", en: "insofar", zh: "就这一点而言", type: "Adverb", level: "C1" },
+  { de: "fortwährend", en: "continuously", zh: "持续地", type: "Adverb", level: "C1" },
+  { de: "ferner", en: "furthermore", zh: "此外", type: "Adverb", level: "C1" },
+  { de: "grundsätzlich", en: "in principle", zh: "原则上", type: "Adverb", level: "C1" },
+  { de: "heutzutage", en: "nowadays", zh: "如今", type: "Adverb", level: "C1" },
+  { de: "lediglich", en: "merely", zh: "仅仅", type: "Adverb", level: "C1" },
+  { de: "möglicherweise", en: "possibly", zh: "可能", type: "Adverb", level: "C1" },
+  { de: "namentlich", en: "namely", zh: "即", type: "Adverb", level: "C1" },
+  { de: "neuerdings", en: "recently", zh: "最近", type: "Adverb", level: "C1" },
+  { de: "nichtsdestotrotz", en: "nevertheless", zh: "然而", type: "Adverb", level: "C1" },
+  { de: "nunmehr", en: "now", zh: "现在", type: "Adverb", level: "C1" },
+  { de: "obgleich", en: "although", zh: "虽然", type: "Adverb", level: "C1" },
+  { de: "reichlich", en: "abundantly", zh: "充分地", type: "Adverb", level: "C1" },
+  { de: "sicherlich", en: "surely", zh: "肯定地", type: "Adverb", level: "C1" },
+  { de: "späterhin", en: "later", zh: "稍后", type: "Adverb", level: "C1" },
+  { de: "stattdessen", en: "instead", zh: "相反", type: "Adverb", level: "C1" },
+  { de: "streng genommen", en: "strictly speaking", zh: "严格地说", type: "Adverb", level: "C1" },
+  { de: "überdies", en: "moreover", zh: "而且", type: "Adverb", level: "C1" },
+  { de: "um so mehr", en: "all the more", zh: "更加", type: "Adverb", level: "C1" },
+  { de: "üblicherweise", en: "usually", zh: "通常", type: "Adverb", level: "C1" },
+  { de: "unzweifelhaft", en: "undoubtedly", zh: "无疑地", type: "Adverb", level: "C1" },
+  { de: "vollständig", en: "completely", zh: "完全地", type: "Adverb", level: "C1" },
+  { de: "willentlich", en: "intentionally", zh: "故意地", type: "Adverb", level: "C1" },
+  { de: "zuvor", en: "before", zh: "之前", type: "Adverb", level: "C1" },
+  { de: "zuweillen", en: "sometimes", zh: "有时", type: "Adverb", level: "C1" },
+  { de: "in Betracht ziehen", en: "to consider", zh: "考虑", type: "Phrase", level: "C1" },
+  { de: "in Kauf nehmen", en: "to accept", zh: "接受", type: "Phrase", level: "C1" },
+  { de: "zum Ausdruck bringen", en: "to express", zh: "表达", type: "Phrase", level: "C1" },
+  { de: "in Anspruch nehmen", en: "to claim", zh: "提出要求", type: "Phrase", level: "C1" },
+  { de: "in Frage stellen", en: "to question", zh: "质疑", type: "Phrase", level: "C1" },
+  { de: "zur Sprache bringen", en: "to mention", zh: "提及", type: "Phrase", level: "C1" },
+  { de: "in Einklang bringen", en: "to harmonize", zh: "协调", type: "Phrase", level: "C1" },
+  { de: "zu Wort kommen", en: "to have a say", zh: "发言", type: "Phrase", level: "C1" },
+  { de: "Stellung nehmen", en: "to take a position", zh: "表态", type: "Phrase", level: "C1" },
+  { de: "ein Auge zudrücken", en: "to overlook", zh: "视而不见", type: "Phrase", level: "C1" },
+  { de: "außer Frage stehen", en: "to be out of the question", zh: "无需讨论", type: "Phrase", level: "C1" },
+  { de: "zur Last fallen", en: "to burden", zh: "成为负担", type: "Phrase", level: "C1" },
+  { de: "zu Lasten gehen", en: "to harm", zh: "伤害", type: "Phrase", level: "C1" },
+  { de: "zu Gute kommen", en: "to benefit", zh: "有利于", type: "Phrase", level: "C1" },
+  { de: "zu Gehör bringen", en: "to make heard", zh: "让人听到", type: "Phrase", level: "C1" },
+  { de: "in Rechnung stellen", en: "to charge", zh: "收费", type: "Phrase", level: "C1" },
+  { de: "aus der Bahn werfen", en: "to upset", zh: "扰乱", type: "Phrase", level: "C1" },
+  { de: "im Auge haben", en: "to have in mind", zh: "心中有数", type: "Phrase", level: "C1" },
+  { de: "am Herzen liegen", en: "to be close to heart", zh: "关心", type: "Phrase", level: "C1" },
+  { de: "auf den Weg bringen", en: "to put on the way", zh: "开始进行", type: "Phrase", level: "C1" },
+  { de: "auf den Grund gehen", en: "to investigate", zh: "调查", type: "Phrase", level: "C1" },
+  { de: "zur Besinnung kommen", en: "to come to one's senses", zh: "清醒过来", type: "Phrase", level: "C1" },
+  { de: "zu Rate ziehen", en: "to consult", zh: "咨询", type: "Phrase", level: "C1" },
+  { de: "zum Greifen nah", en: "within reach", zh: "近在咫尺", type: "Phrase", level: "C1" },
+  { de: "unter keinen Umständen", en: "under no circumstances", zh: "无论如何不", type: "Phrase", level: "C1" },
+  { de: "unter Druck setzen", en: "to pressure", zh: "施加压力", type: "Phrase", level: "C1" },
+  { de: "unter den Tisch fallen lassen", en: "to ignore", zh: "置之不理", type: "Phrase", level: "C1" },
+  { de: "um die Ecke kommen", en: "to turn the corner", zh: "度过难关", type: "Phrase", level: "C1" },
+  { de: "über die Bande spielen", en: "to work indirectly", zh: "间接行动", type: "Phrase", level: "C1" },
+  { de: "gegen den Strom schwimmen", en: "to go against the grain", zh: "逆流而行", type: "Phrase", level: "C1" },
+  { de: "über lange Frist", en: "in the long term", zh: "长期来看", type: "Phrase", level: "C1" },
+  { de: "ohne Umschweife", en: "without beating around the bush", zh: "不绕弯子", type: "Phrase", level: "C1" },
+  { de: "ohne Weiteres", en: "without further ado", zh: "毫无疑问", type: "Phrase", level: "C1" },
+  { de: "von großem Wert", en: "of great value", zh: "很有价值", type: "Phrase", level: "C1" },
+  { de: "von hohem Rang", en: "of high rank", zh: "地位很高", type: "Phrase", level: "C1" },
+  { de: "völlig daneben", en: "completely off", zh: "完全错误", type: "Phrase", level: "C1" },
+  { de: "voll und ganz", en: "completely", zh: "完全地", type: "Phrase", level: "C1" },
+  { de: "weit gefehlt", en: "far from it", zh: "远非如此", type: "Phrase", level: "C1" },
+  { de: "weisungsgebunden", en: "bound by instructions", zh: "受指示约束", type: "Phrase", level: "C1" },
+  { de: "wert zu schätzen", en: "worthy of appreciation", zh: "值得欣赏", type: "Phrase", level: "C1" },
+  { de: "wie es sich gehört", en: "as it should be", zh: "理所当然", type: "Phrase", level: "C1" },
+  { de: "Widerspruch erheben", en: "to object", zh: "提出异议", type: "Phrase", level: "C1" },
+  { de: "wirklich wahr", en: "truly true", zh: "真实无误", type: "Phrase", level: "C1" },
+  { de: "zu rechter Zeit", en: "at the right time", zh: "及时地", type: "Phrase", level: "C1" },
+  { de: "zudringend", en: "urgent", zh: "紧迫的", type: "Phrase", level: "C1" },
+  { de: "zufriedenstellend", en: "satisfactory", zh: "令人满意的", type: "Phrase", level: "C1" },
+  { de: "Zwang ausüben", en: "to coerce", zh: "强制", type: "Phrase", level: "C1" },
+  { de: "zwischen die Zeilen lesen", en: "to read between the lines", zh: "言外之意", type: "Phrase", level: "C1" },
+  { de: "erübrigen", en: "to spare, to make unnecessary", zh: "使不必要", type: "Verb", level: "C2" },
+  { de: "anmuten", en: "to strike as, to seem", zh: "显得", type: "Verb", level: "C2" },
+  { de: "sich erdreisten", en: "to dare, to presume", zh: "胆敢", type: "Verb", level: "C2" },
+  { de: "zuwiderhandeln", en: "to act contrary to, to violate", zh: "违反", type: "Verb", level: "C2" },
+  { de: "verharren", en: "to remain, to stay put", zh: "停留", type: "Verb", level: "C2" },
+  { de: "prägen", en: "to shape, to characterize", zh: "塑造", type: "Verb", level: "C2" },
+  { de: "versiegen", en: "to dry up, to run out", zh: "枯竭", type: "Verb", level: "C2" },
+  { de: "abschwächen", en: "to weaken, to mitigate", zh: "减弱", type: "Verb", level: "C2" },
+  { de: "beschönigen", en: "to gloss over, to whitewash", zh: "粉饰", type: "Verb", level: "C2" },
+  { de: "eröffnen", en: "to open, to reveal", zh: "揭示", type: "Verb", level: "C2" },
+  { de: "divergieren", en: "to diverge, to differ", zh: "分歧", type: "Verb", level: "C2" },
+  { de: "exkulpieren", en: "to exonerate, to clear of blame", zh: "开脱", type: "Verb", level: "C2" },
+  { de: "inferieren", en: "to infer, to deduce", zh: "推断", type: "Verb", level: "C2" },
+  { de: "pervertieren", en: "to pervert, to corrupt", zh: "扭曲", type: "Verb", level: "C2" },
+  { de: "proliferieren", en: "to proliferate, to multiply", zh: "增殖", type: "Verb", level: "C2" },
+  { de: "sedieren", en: "to sedate", zh: "镇静", type: "Verb", level: "C2" },
+  { de: "sich verallgemeinern", en: "to generalize", zh: "普遍化", type: "Verb", level: "C2" },
+  { de: "verstärken", en: "to amplify, to intensify", zh: "加强", type: "Verb", level: "C2" },
+  { de: "verkörpern", en: "to embody, to personify", zh: "体现", type: "Verb", level: "C2" },
+  { de: "einkassieren", en: "to collect, to cash in", zh: "收取", type: "Verb", level: "C2" },
+  { de: "zutage treten", en: "to come to light, to become evident", zh: "显露", type: "Verb", level: "C2" },
+  { de: "vorherrschen", en: "to predominate, to prevail", zh: "盛行", type: "Verb", level: "C2" },
+  { de: "ratifizieren", en: "to ratify, to approve formally", zh: "批准", type: "Verb", level: "C2" },
+  { de: "rekultivieren", en: "to recultivate, to restore", zh: "复垦", type: "Verb", level: "C2" },
+  { de: "die Unversehrtheit", en: "integrity, soundness", zh: "完整性", type: "Nomen", level: "C2" },
+  { de: "der Sachverhalt", en: "facts of the case, state of affairs", zh: "事实", type: "Nomen", level: "C2" },
+  { de: "die Willkür", en: "arbitrary action, capriciousness", zh: "武断", type: "Nomen", level: "C2" },
+  { de: "das Versäumnis", en: "negligence, omission", zh: "疏忽", type: "Nomen", level: "C2" },
+  { de: "die Zumutung", en: "unreasonable demand, imposition", zh: "无理要求", type: "Nomen", level: "C2" },
+  { de: "der Widerruf", en: "revocation, retraction", zh: "撤销", type: "Nomen", level: "C2" },
+  { de: "die Akkumulation", en: "accumulation, piling up", zh: "累积", type: "Nomen", level: "C2" },
+  { de: "die Ambiguität", en: "ambiguity, double meaning", zh: "歧义", type: "Nomen", level: "C2" },
+  { de: "das Debakel", en: "debacle, disaster", zh: "惨败", type: "Nomen", level: "C2" },
+  { de: "die Degeneration", en: "degeneration, decline", zh: "退化", type: "Nomen", level: "C2" },
+  { de: "die Diffamierung", en: "defamation, slander", zh: "诽谤", type: "Nomen", level: "C2" },
+  { de: "die Divergenz", en: "divergence, difference", zh: "分歧", type: "Nomen", level: "C2" },
+  { de: "die Exkulpation", en: "exoneration, clearing of blame", zh: "开脱", type: "Nomen", level: "C2" },
+  { de: "die Infiltration", en: "infiltration, permeation", zh: "渗透", type: "Nomen", level: "C2" },
+  { de: "die Instanz", en: "instance, authority", zh: "机构", type: "Nomen", level: "C2" },
+  { de: "das Konglomerat", en: "conglomerate, aggregate", zh: "联合体", type: "Nomen", level: "C2" },
+  { de: "die Kontinenz", en: "continence, restraint", zh: "节制", type: "Nomen", level: "C2" },
+  { de: "die Kunstfertigkeit", en: "artistry, craftsmanship", zh: "技艺", type: "Nomen", level: "C2" },
+  { de: "die Milderung", en: "mitigation, alleviation", zh: "缓和", type: "Nomen", level: "C2" },
+  { de: "das Paradigma", en: "paradigm, model", zh: "范式", type: "Nomen", level: "C2" },
+  { de: "die Perfidie", en: "perfidy, treachery", zh: "背信", type: "Nomen", level: "C2" },
+  { de: "die Perpetuierung", en: "perpetuation, making permanent", zh: "永久化", type: "Nomen", level: "C2" },
+  { de: "die Proliferation", en: "proliferation, rapid increase", zh: "激增", type: "Nomen", level: "C2" },
+  { de: "die Ramifikation", en: "ramification, consequence", zh: "分支", type: "Nomen", level: "C2" },
+  { de: "die Rekrudeszenz", en: "recrudescence, breaking out again", zh: "复发", type: "Nomen", level: "C2" },
+  { de: "die Remanenz", en: "remanence, persistence", zh: "残留", type: "Nomen", level: "C2" },
+  { de: "die Reverenz", en: "reverence, respect", zh: "敬意", type: "Nomen", level: "C2" },
+  { de: "die Sinekure", en: "sinecure, cushy job", zh: "闲职", type: "Nomen", level: "C2" },
+  { de: "die Streuung", en: "dispersion, spreading", zh: "散布", type: "Nomen", level: "C2" },
+  { de: "die Subsistenz", en: "subsistence, livelihood", zh: "生存", type: "Nomen", level: "C2" },
+  { de: "die Suffizientz", en: "sufficiency, adequacy", zh: "充分", type: "Nomen", level: "C2" },
+  { de: "die Synapse", en: "synapse, nerve connection", zh: "突触", type: "Nomen", level: "C2" },
+  { de: "einschlägig", en: "relevant, pertinent", zh: "相关的", type: "Adjektiv", level: "C2" },
+  { de: "unumstößlich", en: "incontrovertible, irrefutable", zh: "不可推翻的", type: "Adjektiv", level: "C2" },
+  { de: "erbärmlich", en: "wretched, pitiful", zh: "可怜的", type: "Adjektiv", level: "C2" },
+  { de: "labyrinthisch", en: "labyrinthine, maze-like", zh: "迷宫般的", type: "Adjektiv", level: "C2" },
+  { de: "kasuistisch", en: "casuistic, sophistic", zh: "狡辩的", type: "Adjektiv", level: "C2" },
+  { de: "protektionistisch", en: "protectionist", zh: "保护主义的", type: "Adjektiv", level: "C2" },
+  { de: "desolat", en: "desolate, wretched", zh: "荒凉的", type: "Adjektiv", level: "C2" },
+  { de: "ephemer", en: "ephemeral, fleeting", zh: "短暂的", type: "Adjektiv", level: "C2" },
+  { de: "exkulpatorisch", en: "exculpatory, clearing of blame", zh: "开脱性的", type: "Adjektiv", level: "C2" },
+  { de: "fiskal", en: "fiscal, relating to state finances", zh: "财政的", type: "Adjektiv", level: "C2" },
+  { de: "hinfällig", en: "infirm, weak", zh: "衰弱的", type: "Adjektiv", level: "C2" },
+  { de: "immanent", en: "immanent, inherent", zh: "内在的", type: "Adjektiv", level: "C2" },
+  { de: "inkompatibel", en: "incompatible, incongruous", zh: "不相容的", type: "Adjektiv", level: "C2" },
+  { de: "invariabel", en: "invariable, unchanging", zh: "不变的", type: "Adjektiv", level: "C2" },
+  { de: "juvenil", en: "juvenile, youthful", zh: "幼稚的", type: "Adjektiv", level: "C2" },
+  { de: "kollusiv", en: "collusive, involving collusion", zh: "共谋的", type: "Adjektiv", level: "C2" },
+  { de: "kontingent", en: "contingent, dependent on chance", zh: "偶然的", type: "Adjektiv", level: "C2" },
+  { de: "kumulativ", en: "cumulative, adding up", zh: "累积的", type: "Adjektiv", level: "C2" },
+  { de: "kurial", en: "curial, relating to a court", zh: "宫廷的", type: "Adjektiv", level: "C2" },
+  { de: "lakonisch", en: "laconic, concise", zh: "简明的", type: "Adjektiv", level: "C2" },
+  { de: "merkantil", en: "mercantile, commercial", zh: "商业的", type: "Adjektiv", level: "C2" },
+  { de: "jdm. den Wind aus den Segeln nehmen", en: "to take the wind out of one's sails", zh: "挫伤某人的气焰", type: "Phrase", level: "C2" },
+  { de: "das ist ein alter Hut", en: "that's old hat, ancient history", zh: "老生常谈", type: "Phrase", level: "C2" },
+  { de: "jemandem an die Gurgel gehen", en: "to get at someone's throat", zh: "掐住某人的喉咙", type: "Phrase", level: "C2" },
+  { de: "sich in Nichts auflösen", en: "to come to nothing, to dissolve into thin air", zh: "化为乌有", type: "Phrase", level: "C2" },
+  { de: "Wasser auf die Mühle gießen", en: "to grist for the mill, to advantage someone", zh: "给某人帮忙", type: "Phrase", level: "C2" },
+  { de: "sich aufs hohe Ross setzen", en: "to get on one's high horse", zh: "自高自大", type: "Phrase", level: "C2" },
+  { de: "mit den Wölfen heulen", en: "to howl with the wolves, to follow the crowd", zh: "随波逐流", type: "Phrase", level: "C2" },
+  { de: "auf der Strecke bleiben", en: "to fall by the wayside, to be left behind", zh: "被甩在后面", type: "Phrase", level: "C2" },
+  { de: "die Nase voll haben", en: "to be fed up, to have had enough", zh: "厌烦", type: "Phrase", level: "C2" },
+  { de: "einen Klotz am Bein haben", en: "to have a millstone around one's neck", zh: "负担沉重", type: "Phrase", level: "C2" },
+  { de: "das Wort ergreifen", en: "to take the floor, to speak up", zh: "发言", type: "Phrase", level: "C2" },
+  { de: "faule Ausreden", en: "lame excuses", zh: "蹩脚的借口", type: "Phrase", level: "C2" },
+  { de: "sich ins eigene Fleisch schneiden", en: "to cut off one's nose to spite one's face", zh: "自伤其身", type: "Phrase", level: "C2" },
+  { de: "das Zepter schwingen", en: "to wield power, to rule", zh: "掌权", type: "Phrase", level: "C2" },
+  { de: "auf etwas verzichten", en: "to renounce something, to forgo", zh: "放弃", type: "Phrase", level: "C2" },
 ];
 
 
