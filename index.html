@@ -1955,32 +1955,30 @@ async function lookupWord() {
       }
     }
 
-    // Fallback to MyMemory if DeepL not available or failed
+    // Fallback to Google Translate if DeepL not available or failed
     if (!deeplWorked) {
-      var mmResults = await Promise.all([
-        !enFilled ? fetch('https://api.mymemory.translated.net/get?q=' + encodeURIComponent(german) + '&langpair=de|en&de=hwjdreamer92@gmail.com')
+      var gtBase = 'https://translate.googleapis.com/translate_a/single?client=gtx&dt=t&sl=de';
+      var gtResults = await Promise.all([
+        !enFilled ? fetch(gtBase + '&tl=en&q=' + encodeURIComponent(german))
           .then(function(r) { return r.json(); }).catch(function() { return null; }) : Promise.resolve(null),
-        !zhFilled ? fetch('https://api.mymemory.translated.net/get?q=' + encodeURIComponent(german) + '&langpair=de|zh-CN&de=hwjdreamer92@gmail.com')
+        !zhFilled ? fetch(gtBase + '&tl=zh-CN&q=' + encodeURIComponent(german))
           .then(function(r) { return r.json(); }).catch(function() { return null; }) : Promise.resolve(null)
       ]);
 
-      var enMM = mmResults[0];
-      var zhMM = mmResults[1];
+      var enGT = gtResults[0];
+      var zhGT = gtResults[1];
 
-      if (enMM && enMM.responseStatus === 200 && enMM.responseData) {
-        var enText = enMM.responseData.translatedText;
-        var enMatch = enMM.responseData.match;
-        // Filter out spam: reject if contains URL or match quality is too low
-        if (enText && !enText.match(/https?:\/\//) && enMatch >= 0.3) {
+      if (enGT && enGT[0]) {
+        var enText = enGT[0].map(function(seg) { return seg[0]; }).join('');
+        if (enText) {
           document.getElementById('fEnglish').value = enText;
           flashField(document.getElementById('fEnglish'));
           enFilled = true;
         }
       }
-      if (zhMM && zhMM.responseStatus === 200 && zhMM.responseData) {
-        var zhText = zhMM.responseData.translatedText;
-        var zhMatch = zhMM.responseData.match;
-        if (zhText && !zhText.match(/https?:\/\//) && zhMatch >= 0.3) {
+      if (zhGT && zhGT[0]) {
+        var zhText = zhGT[0].map(function(seg) { return seg[0]; }).join('');
+        if (zhText) {
           document.getElementById('fChinese').value = zhText;
           flashField(document.getElementById('fChinese'));
           zhFilled = true;
@@ -1989,7 +1987,7 @@ async function lookupWord() {
     }
 
     if (enFilled || zhFilled) {
-      showToast(deeplWorked ? 'Translated (DeepL)' : 'Translated (MyMemory)');
+      showToast(deeplWorked ? 'Translated (DeepL)' : 'Translated (Google)');
     } else {
       showToast('No translations found');
     }
