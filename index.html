@@ -1904,76 +1904,97 @@ async function lookupWord() {
   btn.classList.add('loading');
   btn.disabled = true;
 
-  var deeplKey = getDeeplKey();
-
   try {
     var enFilled = false, zhFilled = false;
+    var deeplKey = getDeeplKey();
+    var deeplWorked = false;
 
+    // Try DeepL first if key is available
     if (deeplKey) {
-      // Use DeepL API (free tier)
-      var apiBase = deeplKey.endsWith(':fx')
-        ? 'https://api-free.deepl.com/v2/translate'
-        : 'https://api.deepl.com/v2/translate';
+      try {
+        var apiBase = deeplKey.endsWith(':fx')
+          ? 'https://api-free.deepl.com/v2/translate'
+          : 'https://api.deepl.com/v2/translate';
 
-      var [enRes, zhRes] = await Promise.all([
-        fetch(apiBase, {
-          method: 'POST',
-          headers: { 'Authorization': 'DeepL-Auth-Key ' + deeplKey, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text: [german], source_lang: 'DE', target_lang: 'EN' })
-        }).then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; }),
-        fetch(apiBase, {
-          method: 'POST',
-          headers: { 'Authorization': 'DeepL-Auth-Key ' + deeplKey, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text: [german], source_lang: 'DE', target_lang: 'ZH' })
-        }).then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; })
+        var results = await Promise.all([
+          fetch(apiBase, {
+            method: 'POST',
+            headers: { 'Authorization': 'DeepL-Auth-Key ' + deeplKey, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: [german], source_lang: 'DE', target_lang: 'EN' })
+          }).then(function(r) {
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            return r.json();
+          }),
+          fetch(apiBase, {
+            method: 'POST',
+            headers: { 'Authorization': 'DeepL-Auth-Key ' + deeplKey, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: [german], source_lang: 'DE', target_lang: 'ZH' })
+          }).then(function(r) {
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            return r.json();
+          })
+        ]);
+
+        var enRes = results[0];
+        var zhRes = results[1];
+
+        if (enRes && enRes.translations && enRes.translations[0]) {
+          document.getElementById('fEnglish').value = enRes.translations[0].text;
+          flashField(document.getElementById('fEnglish'));
+          enFilled = true;
+          deeplWorked = true;
+        }
+        if (zhRes && zhRes.translations && zhRes.translations[0]) {
+          document.getElementById('fChinese').value = zhRes.translations[0].text;
+          flashField(document.getElementById('fChinese'));
+          zhFilled = true;
+          deeplWorked = true;
+        }
+      } catch (deeplErr) {
+        console.log('DeepL failed, falling back to MyMemory:', deeplErr.message);
+      }
+    }
+
+    // Fallback to MyMemory if DeepL not available or failed
+    if (!deeplWorked) {
+      var mmResults = await Promise.all([
+        !enFilled ? fetch('https://api.mymemory.translated.net/get?q=' + encodeURIComponent(german) + '&langpair=de|en&de=hwjdreamer92@gmail.com')
+          .then(function(r) { return r.json(); }).catch(function() { return null; }) : Promise.resolve(null),
+        !zhFilled ? fetch('https://api.mymemory.translated.net/get?q=' + encodeURIComponent(german) + '&langpair=de|zh-CN&de=hwjdreamer92@gmail.com')
+          .then(function(r) { return r.json(); }).catch(function() { return null; }) : Promise.resolve(null)
       ]);
 
-      if (enRes && enRes.translations && enRes.translations[0]) {
-        var enInput = document.getElementById('fEnglish');
-        enInput.value = enRes.translations[0].text;
-        flashField(enInput);
-        enFilled = true;
-      }
-      if (zhRes && zhRes.translations && zhRes.translations[0]) {
-        var zhInput = document.getElementById('fChinese');
-        zhInput.value = zhRes.translations[0].text;
-        flashField(zhInput);
-        zhFilled = true;
-      }
+      var enMM = mmResults[0];
+      var zhMM = mmResults[1];
 
-      if (!enFilled && !zhFilled) {
-        showToast('DeepL returned no results — check your API key');
+      if (enMM && enMM.responseStatus === 200 && enMM.responseData) {
+        var enText = enMM.responseData.translatedText;
+        var enMatch = enMM.responseData.match;
+        // Filter out spam: reject if contains URL or match quality is too low
+        if (enText && !enText.match(/https?:\/\//) && enMatch >= 0.3) {
+          document.getElementById('fEnglish').value = enText;
+          flashField(document.getElementById('fEnglish'));
+          enFilled = true;
+        }
       }
-    } else {
-      // Fallback: MyMemory (no key needed)
-      var [enRes2, zhRes2] = await Promise.all([
-        fetch('https://api.mymemory.translated.net/get?q=' + encodeURIComponent(german) + '&langpair=de|en')
-          .then(function(r) { return r.json(); }).catch(function() { return null; }),
-        fetch('https://api.mymemory.translated.net/get?q=' + encodeURIComponent(german) + '&langpair=de|zh-CN')
-          .then(function(r) { return r.json(); }).catch(function() { return null; })
-      ]);
-
-      if (enRes2 && enRes2.responseStatus === 200 && enRes2.responseData) {
-        var enInput2 = document.getElementById('fEnglish');
-        enInput2.value = enRes2.responseData.translatedText;
-        flashField(enInput2);
-        enFilled = true;
-      }
-      if (zhRes2 && zhRes2.responseStatus === 200 && zhRes2.responseData) {
-        var zhInput2 = document.getElementById('fChinese');
-        zhInput2.value = zhRes2.responseData.translatedText;
-        flashField(zhInput2);
-        zhFilled = true;
+      if (zhMM && zhMM.responseStatus === 200 && zhMM.responseData) {
+        var zhText = zhMM.responseData.translatedText;
+        var zhMatch = zhMM.responseData.match;
+        if (zhText && !zhText.match(/https?:\/\//) && zhMatch >= 0.3) {
+          document.getElementById('fChinese').value = zhText;
+          flashField(document.getElementById('fChinese'));
+          zhFilled = true;
+        }
       }
     }
 
     if (enFilled || zhFilled) {
-      showToast('Translations found!');
+      showToast(deeplWorked ? 'Translated (DeepL)' : 'Translated (MyMemory)');
     } else {
-      showToast('No translations found — try a different word');
+      showToast('No translations found');
     }
   } catch (err) {
-    showToast('Lookup failed — check your internet connection');
+    showToast('Lookup failed — check your connection');
   } finally {
     btn.classList.remove('loading');
     btn.disabled = false;
